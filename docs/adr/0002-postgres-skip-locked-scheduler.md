@@ -14,5 +14,10 @@ Customer deployments should need as few moving parts as possible.
 claimed run until the next interval, and a run longer than its interval could be started again by another worker.
 Leases close both gaps; delivery remains at-least-once (see architecture.md).
 
+*Amended for v0.3.* A second review showed that v0.2 still recorded a result from a worker that had lost its lease,
+so a late "pass" could resolve an incident opened by a newer run. Each claim now carries a random token, and a result
+is recorded only if the row still carries that token (fencing). Leases are renewed during a run and use the database
+clock; "Run now" is a counter instead of a timestamp comparison.
+
 **Consequences.** No Redis/Kafka/Celery to operate or secure. Throughput is ample for thousands of checks per minute,
 far beyond a single team's needs. If that ceiling is reached, the claim function is the only seam to replace.

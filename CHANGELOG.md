@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.3.0 (2026-11-18)
+
+Fixes from a second external review.
+
+- **Fencing tokens.** Each claim carries a random token; a result is recorded only if the row still carries it. A
+  worker that lost its lease, or whose check definition changed mid-run, has its result discarded before it can touch
+  check state, history, incidents or alerts, so a late "pass" can no longer resolve a newer incident. Migration
+  `0003` adds `monitors.lease_token` and `run_requests`.
+- **Leases.** Renewed in the background while a check runs; renewal needs the same token and a live lease; all lease
+  and schedule times use the database clock. "Run now" is a counter: clicks during a run coalesce into one rerun.
+- **No open metadata transaction during warehouse I/O.** The check definition is copied out and the session closed
+  before the warehouse is contacted.
+- **Redacted warehouse errors.** Stored and alerted messages carry the error class, a fixed description and the
+  SQLSTATE only; the full text goes to the local log. BigQuery jobs are cancelled when they time out.
+- **Stricter self-monitoring.** `/watchdog` also fails when no check has completed recently or every check on a
+  connection fails to execute; the dead man's switch pings only while all `/watchdog` conditions are healthy.
+- **Docs.** Outbound connections listed in full; custom assertions must return an aggregate; timeouts, transaction
+  boundaries and overlap guarantees corrected.
+
 ## 0.2.0 (2026-11-18)
 
 Scheduler and self-monitoring fixes from an external review of v0.1.

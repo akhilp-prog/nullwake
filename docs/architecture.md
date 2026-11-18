@@ -28,19 +28,31 @@ sequenceDiagram
 
 Design points:
 
-- **Lease, run, then reschedule.** A worker commits a lease on the check (owner + expiry, by default
-  3 × the query timeout + 60 s) before contacting the warehouse, so no metadata transaction is held open during slow
-  warehouse queries. `next_run_at` moves only when the run finishes, so a run that takes longer than the check's
-  interval is not started again while its lease is live, and a worker that dies mid-run delays the check until its
-  lease expires instead of skipping it. The lease is renewed right before each check in a batch starts.
-- **What the lease does not guarantee.** A run that outlives its lease (every warehouse query has a statement
-  timeout, so this needs a stalled connection) can overlap with a reclaimed run. The worker that lost its lease still
-  records its result but leaves the schedule to the new owner, and the one-active-incident index below keeps the
-  overlap from opening duplicate incidents. Runs are therefore at-least-once, not exactly-once.
+- **Lease, run, then reschedule.** A worker claims a due check by writing a lease on its row: owner, expiry
+  (by default 3 × the query timeout + 60 s) and a fresh random token. It then copies the check's definition out of the
+  metadata store and **closes that session before contacting the warehouse**, so no metadata transaction is open
+  during warehouse I/O. While the check runs, a background thread renews the lease every lease/3 seconds, for at most
+  two lease lengths. `next_run_at` moves only when an accepted run finishes. A run that takes longer than its interval
+  is not started again while its lease is live, and a worker that dies mid-run delays the check until its lease
+  expires instead of skipping it. All lease and schedule times come from the database clock, not the workers' clocks.
+- **Fencing: late results are discarded.** The result is recorded only if, under the row lock, the row still carries
+  the claim's token. A worker whose lease expired and was reclaimed, or whose check definition or connection changed
+  while it ran (`nullwake apply` clears the claim), gets its result thrown away before it touches the check's state,
+  history, incidents or the alert outbox. So a late "pass" can never resolve an incident opened by a newer run.
+  Renewal requires the same token and a lease that has not yet expired; an expired lease is never revived.
+- **What is and is not guaranteed.** Two runs of one check can still execute in the warehouse at the same time if a
+  worker is paused longer than its lease (warehouse queries are read-only, so this costs only load), but only the
+  current claim's result is recorded. Execution is therefore at-least-once; recorded results are from one claim at a
+  time. "Run now" increments a counter on the check; a run that finishes with a higher count than it was claimed with
+  is followed by exactly one immediate rerun, however many times the button was pressed.
+- **Timeouts.** Each warehouse statement carries a server-side timeout (Postgres `statement_timeout`, Snowflake
+  `STATEMENT_TIMEOUT_IN_SECONDS`). BigQuery waits up to the timeout and then cancels the job. A check runs a few
+  statements, so a run is bounded by roughly that many timeouts plus connection time, not by one timeout.
 - **Watching the watcher.** Each worker writes a heartbeat after every check and every idle pass. A loop that makes
-  no progress for the lease + 120 s exits so the container restarts it. `/watchdog` and the
-  `nullwake_checks_overdue` / `nullwake_alert_deliveries_stalled` metrics report a stopped worker, overdue checks and
-  stuck alerts without needing a worker to be alive (see operations.md, "Watching the watcher").
+  no progress for the lease + 120 s exits so the container restarts it. `/watchdog` reports, without needing a worker
+  to be alive: no recent heartbeat, checks overdue, no check completed recently, every check on a connection failing
+  to execute, and stuck alert delivery. Heartbeats show the loop is alive; the last two show work is actually getting
+  done. See operations.md, "Watching the watcher".
 - **Incident invariants live in the database.** A partial unique index (`monitor_id WHERE status <> 'resolved'`)
   guarantees one active incident per check even if a manual run races the scheduler.
 - **Transactional outbox.** Alert rows are written in the same transaction as the incident change. Delivery is

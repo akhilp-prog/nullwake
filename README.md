@@ -27,7 +27,7 @@ someone notices. Nullwake makes the producer's promises explicit and checks them
   in pull requests and are applied with `nullwake apply` or `POST /api/v1/config/apply`.
 - **Read-only by construction.** Postgres checks run in `READ ONLY` transactions with a statement timeout;
   identifiers are validated, never interpolated from free text; custom SQL must be a single `SELECT`.
-  Only aggregates leave the warehouse. No rows are copied. If you enable Slack or webhook alerts, those messages
+  Only aggregates leave the warehouse. No rows are copied, and warehouse error text is redacted before it is stored. If you enable Slack or webhook alerts, those messages
   carry check, dataset and owner names and the aggregate values; see [what leaves the network](docs/security.md#what-leaves-the-network).
 - **Secrets never stored.** Connections reference environment variables (`dsnEnv: WAREHOUSE_DSN`). Inline
   secrets are rejected at validation time.
@@ -35,12 +35,12 @@ someone notices. Nullwake makes the producer's promises explicit and checks them
   deduplicated repeats, a timeline of every change, acknowledgement and notes, and automatic resolution.
 - **Reliable alerting.** Slack and signed webhooks (HMAC-SHA256) are queued in a transactional outbox and
   retried with exponential backoff, so an alert is never lost to a crash between "incident opened" and "sent".
-- **Horizontally scalable worker.** A due check is claimed with an expiring lease (`FOR UPDATE SKIP LOCKED` keeps
-  two workers off the same row). Runs never overlap while a lease is live, and a crashed worker's checks are
-  reclaimed when its lease expires.
+- **Horizontally scalable worker.** A due check is claimed with an expiring, renewed lease and a fencing token
+  (`FOR UPDATE SKIP LOCKED` keeps two workers off the same row). A crashed worker's checks are reclaimed when its
+  lease expires, and a late result from a reclaimed run is discarded, so it can never resolve a newer incident.
 - **Watches itself.** `/watchdog` returns 503 when no worker has reported in, checks are overdue or alert delivery
-  is stuck, for an external uptime monitor; an optional outbound ping (`NULLWAKE_DEADMAN_URL`) works as a dead
-  man's switch. A worker whose loop stalls exits and is restarted.
+  is stuck, or checks cannot execute, for an external uptime monitor; an optional outbound ping
+  (`NULLWAKE_DEADMAN_URL`) works as a dead man's switch and stops when any of those is unhealthy. A worker whose loop stalls exits and is restarted.
 - **CI gate.** `nullwake check contracts/` runs every contract directly against the warehouse and exits
   non-zero on failure. No server is needed, so it drops into GitHub Actions after `dbt build`.
 - **Operable.** `/healthz`, `/readyz` (database + migration state), Prometheus `/metrics`, JSON logs,

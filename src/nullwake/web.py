@@ -233,7 +233,7 @@ def check_action(request: Request, check_id: int, action: str, csrf: str = Form(
     if monitor is None:
         raise HTTPException(404, "check not found")
     if action == "run":
-        monitor.next_run_at = utcnow()
+        engine.request_run(monitor)
         engine.audit(db, user.email, "check.run_now", f"check/{monitor.name}")
     elif action == "accept-schema":
         if not engine.accept_schema(db, monitor, user.email):

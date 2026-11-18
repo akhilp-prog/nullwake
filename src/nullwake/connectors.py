@@ -11,6 +11,27 @@ import os
 import re
 from dataclasses import dataclass
 from typing import Any
+import logging
+
+log = logging.getLogger("nullwake.connectors")
+
+
+# Fixed wording per SQLSTATE: says what went wrong without repeating anything the database put in its message.
+SAFE_REASONS = {
+    "57014": "statement timeout", "25006": "read-only transaction", "42P01": "table does not exist",
+    "42703": "column does not exist", "42501": "permission denied", "42601": "syntax error",
+    "22": "data exception", "08": "connection failure", "53": "insufficient resources", "57": "operator intervention",
+}
+
+
+def redacted(name: str, exc: BaseException) -> "ConnectorError":
+    """Warehouse error text can quote data (e.g. `invalid input syntax for type integer: "4111-..."`). Keep only the
+    error class and SQLSTATE in anything that is stored or alerted on; the full text goes to this host's log only."""
+    code = getattr(exc, "sqlstate", None) or getattr(exc, "sqlstate_code", None) or getattr(exc, "code", None)
+    log.warning("warehouse error on %s: %s", name, str(exc).strip()[:2000])
+    code = code if isinstance(code, str) else ""
+    reason = SAFE_REASONS.get(code) or SAFE_REASONS.get(code[:2]) or exc.__class__.__name__
+    return ConnectorError(f"{name}: query failed: {reason}" + (f" (SQLSTATE {code})" if code else ""))
 
 IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]{0,127}$")
 CONNECTION_TYPES = ("postgres", "snowflake", "bigquery")
@@ -200,8 +221,7 @@ class PostgresConnector(Connector):
                 cur.execute(sql, params)
                 return cur.fetchall()
         except psycopg.Error as exc:
-            message = str(exc).strip().splitlines()[0] if str(exc).strip() else exc.__class__.__name__
-            raise ConnectorError(f"{self.name}: {message}") from None
+            raise redacted(self.name, exc) from None
 
     def row(self, sql: str) -> tuple:
         rows = self._run(sql)
@@ -248,7 +268,7 @@ class SnowflakeConnector(Connector):  # pragma: no cover - requires a Snowflake 
                 cur.execute(sql)
                 rows = cur.fetchall()
         except Exception as exc:
-            raise ConnectorError(f"{self.name}: {str(exc).splitlines()[0]}") from None
+            raise redacted(self.name, exc) from None
         if len(rows) != 1:
             raise ConnectorError(f"expected one row, got {len(rows)}")
         return tuple(rows[0])
@@ -284,10 +304,17 @@ class BigQueryConnector(Connector):  # pragma: no cover - requires a GCP project
     def row(self, sql: str) -> tuple:
         config = self.bq.QueryJobConfig(labels={"tool": "nullwake"},
                                         maximum_bytes_billed=int(self.spec.get("maximumBytesBilled", 10 * 1024**3)))
+        job = None
         try:
-            rows = list(self.client.query(sql, job_config=config).result(timeout=self.timeout))
+            job = self.client.query(sql, job_config=config)
+            rows = list(job.result(timeout=self.timeout))
         except Exception as exc:
-            raise ConnectorError(f"{self.name}: {str(exc).splitlines()[0]}") from None
+            if job is not None and not job.done():
+                try:  # result(timeout=) only stops waiting; cancel so the job stops using slots and bytes
+                    job.cancel()
+                except Exception:
+                    log.warning("could not cancel BigQuery job %s", getattr(job, "job_id", "?"))
+            raise redacted(self.name, exc) from None
         if len(rows) != 1:
             raise ConnectorError(f"expected one row, got {len(rows)}")
         return tuple(rows[0].values())

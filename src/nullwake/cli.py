@@ -50,13 +50,13 @@ def cmd_worker_health(args) -> int:
 
     from .config import get_settings
     from .db import session_factory
-    from .models import WorkerHeartbeat, utcnow
+    from .models import WorkerHeartbeat
     settings = get_settings()
     max_age = args.max_age or settings.stall_seconds + 60
     with session_factory()() as db:
-        beat = db.scalar(select(func.max(WorkerHeartbeat.heartbeat_at))
-                         .where(WorkerHeartbeat.worker_id.like(f"{socket.gethostname()}:%")))
-    age = (utcnow() - beat).total_seconds() if beat else None
+        age = db.scalar(select(func.extract("epoch", func.now() - func.max(WorkerHeartbeat.heartbeat_at)))
+                        .where(WorkerHeartbeat.worker_id.like(f"{socket.gethostname()}:%")))
+    age = float(age) if age is not None else None
     if age is None or age > max_age:
         print(f"unhealthy: last heartbeat {'never' if age is None else f'{age:.0f}s ago'} (max {max_age}s)")
         return 1

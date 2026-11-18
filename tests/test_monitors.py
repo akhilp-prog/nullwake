@@ -118,6 +118,13 @@ def test_statement_timeout(wh):
     assert result.status == "error" and "statement timeout" in result.message
 
 
+def test_warehouse_error_text_is_redacted(wh, pg):
+    """Postgres quotes the offending value in its error text; it must not reach messages, incidents or alerts."""
+    result = evaluate(pg, "assertion", "", {"sql": "select 'card-4111-1111'::int", "maxValue": 0})
+    assert result.status == "error" and "data exception" in result.message and "22P02" in result.message
+    assert "4111" not in result.message
+
+
 def test_missing_env_is_reported():
     from nullwake.connectors import ConnectorError, PostgresConnector
     try:

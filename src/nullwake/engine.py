@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from .connectors import ConnectorError, open_connector
@@ -89,8 +89,14 @@ def apply_bundle(session: Session, bundle: Bundle, actor: str, prune: bool = Fal
                 session.add(Monitor(name=mdef.name, next_run_at=utcnow(), state={}, **values))
             else:
                 definition_changed = any(getattr(mon, k) != values[k] for k in ("kind", "dataset", "params"))
+                connection_changed = mon.connection_name != values["connection_name"]
                 for k, v in values.items():
                     setattr(mon, k, v)
+                if definition_changed or connection_changed:
+                    # A run of the old definition may be in flight: drop its claim so its result is discarded.
+                    # Written as an UPDATE, not via attributes: this session's copy of the row may predate the claim.
+                    session.execute(update(Monitor).where(Monitor.id == mon.id).values(
+                        lease_owner=None, lease_token=None, lease_expires_at=None))
                 if definition_changed:
                     mon.state, mon.next_run_at = {}, utcnow()
     if prune:
@@ -104,23 +110,56 @@ def apply_bundle(session: Session, bundle: Bundle, actor: str, prune: bool = Fal
     return summary
 
 
-def run_check(session: Session, monitor: Monitor, timeout_seconds: int) -> tuple[Result, int, datetime]:
-    """Execute against the warehouse. Does not write to the metadata store."""
+@dataclass(frozen=True)
+class CheckSpec:
+    """Everything a run needs, copied out of the metadata store so no metadata transaction stays open while the
+    warehouse query runs."""
+    monitor_id: int
+    name: str
+    kind: str
+    dataset: str
+    params: dict
+    state: dict
+    connection_name: str
+    connection_type: str | None
+    connection_spec: dict | None
+
+
+def load_check(session: Session, monitor: Monitor) -> CheckSpec:
+    conn_row = session.scalar(select(Connection).where(Connection.name == monitor.connection_name))
+    return CheckSpec(monitor.id, monitor.name, monitor.kind, monitor.dataset, dict(monitor.params or {}),
+                     dict(monitor.state or {}), monitor.connection_name,
+                     conn_row.type if conn_row else None, dict(conn_row.spec) if conn_row else None)
+
+
+def run_spec(spec: CheckSpec, timeout_seconds: int) -> tuple[Result, int, datetime]:
+    """Execute against the warehouse. Touches no metadata session."""
     started = utcnow()
     t0 = time.monotonic()
-    conn_row = session.scalar(select(Connection).where(Connection.name == monitor.connection_name))
-    if conn_row is None:
-        result = Result("error", f"connection '{monitor.connection_name}' is not defined")
+    if spec.connection_type is None:
+        result = Result("error", f"connection '{spec.connection_name}' is not defined")
     else:
         try:
-            with open_connector(conn_row.name, conn_row.type, conn_row.spec, timeout_seconds) as conn:
-                result = evaluate(conn, monitor.kind, monitor.dataset, monitor.params, monitor.state)
+            with open_connector(spec.connection_name, spec.connection_type, spec.connection_spec,
+                                timeout_seconds) as conn:
+                result = evaluate(conn, spec.kind, spec.dataset, spec.params, spec.state)
         except ConnectorError as exc:
             result = Result("error", str(exc))
         except Exception as exc:  # never let one bad check kill the worker
-            log.exception("check %s crashed", monitor.name)
+            log.exception("check %s crashed", spec.name)
             result = Result("error", f"internal error: {exc.__class__.__name__}")
     return result, int((time.monotonic() - t0) * 1000), started
+
+
+def run_check(session: Session, monitor: Monitor, timeout_seconds: int) -> tuple[Result, int, datetime]:
+    """Load and run a check in one call (CLI and tests). The worker uses load_check + run_spec instead."""
+    return run_spec(load_check(session, monitor), timeout_seconds)
+
+
+def request_run(monitor: Monitor) -> None:
+    """"Run now": make the check due, and bump the counter so a run that is already going is followed by another."""
+    monitor.run_requests = Monitor.run_requests + 1  # incremented in SQL, so concurrent clicks are all counted
+    monitor.next_run_at = func.now()
 
 
 def record_result(session: Session, monitor: Monitor, result: Result, duration_ms: int, started: datetime,
@@ -227,7 +266,7 @@ def accept_schema(session: Session, monitor: Monitor, actor: str) -> bool:
     if not last or not last.observed.get("columns"):
         return False
     monitor.state = {**monitor.state, "baseline": last.observed["columns"]}
-    monitor.next_run_at = utcnow()
+    request_run(monitor)
     audit(session, actor, "schema.accept", f"check/{monitor.name}")
     return True
 

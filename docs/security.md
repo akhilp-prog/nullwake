@@ -12,8 +12,15 @@
 
 ## What leaves the network
 
-With no alert channels configured, nothing leaves the deployment: the web UI, API and metadata store all run inside
-it. Each enabled channel sends the following to its destination (Slack's servers, or your webhook URL):
+Nullwake makes these outbound connections, and no others:
+
+| Connection | Sends | When |
+| --- | --- | --- |
+| Your warehouse | Generated read-only queries; receives aggregates and column metadata | Always (a hosted warehouse such as Snowflake or BigQuery is outside your network) |
+| Each alert channel (Slack or your webhook URL) | The fields below | Only if you configure channels |
+| `NULLWAKE_DEADMAN_URL` | A plain GET with no body | Only if you set it |
+
+Each alert channel receives:
 
 | Field | Example |
 | --- | --- |
@@ -23,8 +30,18 @@ it. Each enabled channel sends the following to its destination (Slack's servers
 | Check message with aggregate values | `Data is 3 h old (limit 20 min)`, `412 rows, below the expected 6,500–13,500` |
 | Link back to the incident | `https://nullwake.internal/incidents/42` |
 
-No warehouse rows, column values or credentials are sent. If dataset or owner names are themselves sensitive, use a
-webhook to a receiver inside your network instead of Slack. The `/watchdog` endpoint exposes counts only.
+No warehouse rows or credentials are sent. Two limits on that guarantee:
+
+- **Warehouse error text is redacted.** Databases often quote the offending value in an error (for example
+  `invalid input syntax for type integer: "4111-…"`). Nullwake stores and alerts only the error class, a fixed
+  description and the SQLSTATE (e.g. `query failed: data exception (SQLSTATE 22P02)`); the full text is written only
+  to the worker's local log.
+- **Custom assertions are trusted to return an aggregate.** An assertion's single number appears in its message. A
+  query such as `SELECT max(card_number) …` would put a real value in an alert, so review assertion SQL in pull
+  requests like any other code: it must return a count or other approved aggregate.
+
+If dataset or owner names are themselves sensitive, use a webhook to a receiver inside your network instead of Slack.
+The `/watchdog` endpoint exposes counts only.
 
 ## Read-only warehouse access
 

@@ -100,6 +100,10 @@ class Monitor(Base):
     # Lease held by the worker that is running this check. A crashed worker's lease expires and the check is reclaimed.
     lease_owner: Mapped[str | None] = mapped_column(String(120))
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Fencing token for the current claim: a result is accepted only if it carries the token that is still on the row.
+    lease_token: Mapped[str | None] = mapped_column(String(36))
+    # Bumped by "Run now". A run that finishes with a higher count than it was claimed with is rerun at once.
+    run_requests: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     contract: Mapped[Contract | None] = relationship(back_populates="monitors")
 
     __table_args__ = (Index("ix_monitors_due", "enabled", "next_run_at"),)

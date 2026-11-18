@@ -10,7 +10,7 @@ from . import engine
 from .config import Settings
 from .contracts import ContractError, load_documents, parse_bundle
 from .deps import get_db, require, settings_dep, verify_mutation
-from .models import CheckRun, Connection, Contract, Incident, Monitor, utcnow
+from .models import CheckRun, Connection, Contract, Incident, Monitor
 from .security import Principal
 
 STATUS = func.coalesce(Monitor.last_status, "pending").label("status")
@@ -87,7 +87,7 @@ def run_now(check_id: int, request: Request, db: Session = Depends(get_db),
     m = db.get(Monitor, check_id)
     if m is None:
         raise HTTPException(404, "check not found")
-    m.next_run_at = utcnow()
+    engine.request_run(m)
     engine.audit(db, principal.email, "check.run_now", f"check/{m.name}")
     return {"queued": True}
 

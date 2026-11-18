@@ -39,11 +39,14 @@ least one of these, alerting through a channel that does not depend on Nullwake:
 
 - **External uptime check on `/watchdog`.** It returns `200` with `ok: true`, or `503` with the problems: no worker
   heartbeat (older than the lease + 180 s), checks overdue by more than `NULLWAKE_WATCHDOG_GRACE_SECONDS` (default
-  300) with no live lease, or alerts pending for over 15 minutes or failed in the last day. It reports counts only,
+  300) with no live lease, no check completed within the longest interval + grace + lease, every enabled check on
+  some connection failing to execute (warehouse unreachable, grant revoked), or alerts pending for over 15 minutes
+  or failed in the last day. It reports counts only,
   no check, dataset or channel names, and the bundled proxy serves it. Point Google Cloud Monitoring uptime checks,
   UptimeRobot or Pingdom at it.
-- **Outbound dead man's switch.** Set `NULLWAKE_DEADMAN_URL` to a ping URL (e.g. healthchecks.io); each worker GETs it
-  about once a minute, and the service alerts when the pings stop. Works without exposing anything inbound.
+- **Outbound dead man's switch.** Set `NULLWAKE_DEADMAN_URL` to a ping URL (e.g. healthchecks.io). Each worker GETs it
+  about once a minute **only while the same conditions as `/watchdog` are healthy**, so a worker that is alive but
+  cannot get checks done stops pinging too, and the service alerts. Works without exposing anything inbound.
 
 Drill: `docker compose stop worker`, confirm the external alert arrives (within the lease + 180 s plus the monitor's
 own interval), then `docker compose start worker` and confirm it clears.
@@ -90,8 +93,9 @@ into a separate database served identical counts and history.)
 
 ## Scaling
 
-- More checks or slower warehouses: `docker compose up -d --scale worker=3`. Each run is protected by a lease, so
-  replicas do not start a check that another replica is running; a check is reclaimed only after its lease expires
+- More checks or slower warehouses: `docker compose up -d --scale worker=3`. Each run is protected by a renewed lease,
+  so replicas do not start a check that another replica is running; a check is reclaimed only after its lease
+  expires, and a result from a reclaimed run is discarded (see architecture.md, "Fencing")
   (`NULLWAKE_WORKER_LEASE_SECONDS`, default 3 × query timeout + 60 s). Tune `NULLWAKE_WORKER_BATCH_SIZE` and `NULLWAKE_QUERY_TIMEOUT_SECONDS`.
 - Run history grows with `checks × runs/day`; it is pruned hourly after `NULLWAKE_RETENTION_DAYS` (default 30).
 
