@@ -1,0 +1,9 @@
+apiVersion: nullwake/v1
+kind: Connection
+metadata:
+  name: bigquery-prod
+spec:
+  type: bigquery
+  project: acme-analytics
+  credentialsFileEnv: GOOGLE_APPLICATION_CREDENTIALS   # omit to use workload identity
+  maximumBytesBilled: 5368709120                       # 5 GiB cap per check query

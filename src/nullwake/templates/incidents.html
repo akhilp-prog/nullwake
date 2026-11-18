@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% import "_macros.html" as m %}
+{% block title %}Incidents{% endblock %}
+{% block content %}
+<div class="heading"><div><p class="eyebrow">Incidents</p><h1>Incident log</h1></div>
+  <nav class="tabs">{% for s in ('active', 'resolved', 'all') %}<a href="/incidents?status={{ s }}" class="{{ 'on' if status == s }}">{{ s|title }}</a>{% endfor %}</nav>
+</div>
+<section class="card flush">
+<table>
+  <thead><tr><th>#</th><th>Check</th><th>Severity</th><th>Status</th><th>Opened</th><th>Duration / last seen</th></tr></thead>
+  <tbody>
+  {% for i in incidents %}
+  <tr>
+    <td><a href="/incidents/{{ i.id }}">#{{ i.id }}</a></td>
+    <td><a href="/incidents/{{ i.id }}"><b>{{ i.monitor.name }}</b></a><small class="block">{{ i.monitor.dataset }}</small></td>
+    <td>{{ m.sev(i.severity) }}</td><td>{{ m.istatus(i.status) }}</td>
+    <td class="nowrap">{{ i.opened_at|utc }}</td>
+    <td class="nowrap">{% if i.resolved_at %}resolved {{ i.resolved_at|ago }}{% else %}seen {{ i.last_seen_at|ago }} · {{ i.failure_count }} failed run{{ 's' if i.failure_count != 1 }}{% endif %}</td>
+  </tr>
+  {% else %}<tr><td colspan="6" class="calm">No incidents in this view.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</section>
+{% endblock %}

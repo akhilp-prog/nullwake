@@ -1,0 +1,31 @@
+apiVersion: nullwake/v1
+kind: DataContract
+metadata:
+  name: orders
+  owner: commerce-data@retail.example
+  description: >
+    Order fact table built by the commerce dbt project (model fct_orders). Feeds revenue
+    dashboards and finance reconciliation, so it must be fresh, complete and unique per order.
+spec:
+  connection: retail
+  dataset: analytics.fct_orders
+  schedule: {intervalMinutes: 2}
+  schema:
+    allowAdditionalColumns: true
+    columns:
+      - {name: order_id, type: bigint, nullable: false}
+      - {name: customer_id, type: bigint, nullable: false}
+      - {name: amount, type: numeric}
+      - {name: currency, type: text}
+      - {name: status, type: text}
+      - {name: created_at, type: timestamptz}
+      - {name: loaded_at, type: timestamptz}
+  uniqueKey: [order_id]
+  freshness: {column: loaded_at, maxAgeMinutes: 20, severity: critical}
+  volume: {column: created_at, windowHours: 1, lookbackWindows: 12, tolerancePct: 35, minRows: 10}
+  checks:
+    - name: no_negative_amounts
+      description: Refunds are modelled as status = 'refunded', never as negative amounts.
+      sql: select count(*) from analytics.fct_orders where amount < 0
+      maxValue: 0
+      severity: critical

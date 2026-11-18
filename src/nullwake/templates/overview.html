@@ -1,0 +1,49 @@
+{% extends "base.html" %}{% import "_macros.html" as m %}
+{% block title %}Overview{% endblock %}
+{% block content %}
+<div class="heading">
+  <div><p class="eyebrow">Overview</p><h1>Data reliability</h1></div>
+  <p class="worker {{ 'ok' if worker_ok else 'down' }}">Scheduler {{ 'running' if worker_ok else 'not reporting' }} · last heartbeat {{ worker_beat|ago }}</p>
+</div>
+<div class="kpis">
+  <div class="kpi {{ 'bad' if active }}"><span>Active incidents</span><strong>{{ active|length }}</strong></div>
+  <div class="kpi"><span>Checks passing</span><strong>{{ counts.get('pass', 0) }}<small>/ {{ total }}</small></strong></div>
+  <div class="kpi {{ 'bad' if counts.get('fail', 0) }}"><span>Failing</span><strong>{{ counts.get('fail', 0) }}</strong></div>
+  <div class="kpi {{ 'warn' if counts.get('error', 0) }}"><span>Errors</span><strong>{{ counts.get('error', 0) }}</strong></div>
+  <div class="kpi"><span>MTTR (24h, {{ resolved_24h }} resolved)</span><strong>{{ mttr }}</strong></div>
+</div>
+<div class="grid">
+  <section class="card">
+    <div class="card-h"><h2>Active incidents</h2><a href="/incidents">All incidents</a></div>
+    {% if active %}
+    <ul class="list">
+      {% for i in active %}
+      <li><a href="/incidents/{{ i.id }}" class="row">
+        <span>{{ m.sev(i.severity) }} {{ m.istatus(i.status) }}</span>
+        <span class="grow"><b>{{ i.monitor.name }}</b><small>{{ i.monitor.last_message }}</small></span>
+        <span class="muted nowrap">opened {{ i.opened_at|ago }}</span></a></li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="calm">All quiet. Every contract is being met.</p>{% endif %}
+    {% if recent %}
+    <h3>Recently resolved</h3>
+    <ul class="list compact">
+      {% for i in recent %}<li><a href="/incidents/{{ i.id }}" class="row"><span class="grow">{{ i.monitor.name }}</span><span class="muted nowrap">resolved {{ i.resolved_at|ago }}</span></a></li>{% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+  <section class="card">
+    <div class="card-h"><h2>Contracts</h2><a href="/contracts">Details</a></div>
+    {% if health %}
+    <ul class="list">
+      {% for h in health %}
+      <li><a href="/contracts/{{ h.contract.name }}" class="row">
+        <span>{{ m.status(h.worst) }}</span>
+        <span class="grow"><b>{{ h.contract.name }}</b><small>{{ h.contract.dataset }} · {{ h.contract.owner or 'no owner' }}</small></span>
+        <span class="muted nowrap">{{ h.passing }}/{{ h.total }} passing</span></a></li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="calm">No contracts yet. Apply one with <code>nullwake apply contracts/</code>.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

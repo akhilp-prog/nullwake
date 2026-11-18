@@ -1,0 +1,28 @@
+{% extends "base.html" %}{% import "_macros.html" as m %}
+{% block title %}{{ contract.name }}{% endblock %}
+{% block content %}
+<a class="back" href="/contracts">← Contracts</a>
+<div class="heading"><div><p class="eyebrow">Contract · v{{ contract.version }}</p><h1>{{ contract.name }}</h1>
+<p class="muted"><code>{{ contract.dataset }}</code> on {{ contract.connection_name }} · owner {{ contract.owner or '—' }}</p>
+{% if contract.description %}<p>{{ contract.description }}</p>{% endif %}</div></div>
+<section class="card flush">
+<table>
+  <thead><tr><th>Check</th><th>Kind</th><th>Status</th><th>Latest result</th><th>Trend</th><th>Last run</th></tr></thead>
+  <tbody>
+  {% for mon in contract.monitors %}
+  <tr>
+    <td><a href="/checks/{{ mon.id }}"><b>{{ mon.name.split('.', 1)[1] }}</b></a><small class="block">{{ m.sev(mon.severity) }}</small></td>
+    <td>{{ mon.kind|replace('_', ' ') }}</td><td>{{ m.status(mon.last_status) }}</td>
+    <td>{{ mon.last_message or 'Waiting for first run' }}</td>
+    <td class="trend t-{{ mon.last_status or 'pending' }}">{{ sparks[mon.id]|safe }}</td>
+    <td class="nowrap">{{ mon.last_run_at|ago }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</section>
+<section class="card">
+  <div class="card-h"><h2>Contract source</h2><span class="muted">sha256 {{ contract.checksum[:12] }}</span></div>
+  <pre><code>{{ contract.source_yaml }}</code></pre>
+</section>
+{% endblock %}

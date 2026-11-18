@@ -1,0 +1,30 @@
+{% extends "base.html" %}{% import "_macros.html" as m %}
+{% block title %}{{ monitor.name }}{% endblock %}
+{% block content %}
+<a class="back" href="{{ '/contracts/' ~ monitor.contract.name if monitor.contract else '/contracts' }}">← {{ monitor.contract.name if monitor.contract else 'Contracts' }}</a>
+<div class="heading"><div><p class="eyebrow">{{ monitor.kind|replace('_', ' ')|title }} check</p><h1>{{ monitor.name }}</h1>
+<p>{{ m.status(monitor.last_status) }} {{ m.sev(monitor.severity) }} <span class="muted">· every {{ (monitor.interval_seconds // 60) }} min · next run {{ monitor.next_run_at|ago }}</span></p></div>
+{% if user.can('editor') %}
+<div class="actions">
+  <form method="post" action="/checks/{{ monitor.id }}/run"><input type="hidden" name="csrf" value="{{ user.csrf }}"><button class="secondary">Run now</button></form>
+  {% if can_accept %}<form method="post" action="/checks/{{ monitor.id }}/accept-schema"><input type="hidden" name="csrf" value="{{ user.csrf }}"><button>Accept new schema</button></form>{% endif %}
+</div>{% endif %}
+</div>
+{% if incident %}<p class="alert">Active incident <a href="/incidents/{{ incident.id }}">#{{ incident.id }}</a>, opened {{ incident.opened_at|ago }}.</p>{% endif %}
+<div class="grid wide-left">
+  <section class="card"><h2>Latest result</h2><p class="big">{{ monitor.last_message or 'Waiting for first run' }}</p>
+    {% if spark %}<div class="trend wide t-{{ monitor.last_status or 'pending' }}">{{ spark|safe }}</div><p class="muted small">Measured value over the last {{ runs|length }} runs</p>{% endif %}</section>
+  <section class="card"><h2>Definition</h2><dl>
+    <dt>Dataset</dt><dd><code>{{ monitor.dataset }}</code></dd><dt>Connection</dt><dd>{{ monitor.connection_name }}</dd>
+    {% for k, v in monitor.params.items() if k not in ('expected',) %}<dt>{{ k }}</dt><dd><code>{{ v }}</code></dd>{% endfor %}
+    {% if monitor.params.expected %}<dt>expected columns</dt><dd>{{ monitor.params.expected|length }} defined in contract</dd>{% endif %}
+  </dl></section>
+</div>
+<section class="card flush">
+  <table><thead><tr><th>Time</th><th>Result</th><th>Message</th><th>Value</th><th>Trigger</th><th>Duration</th></tr></thead><tbody>
+  {% for r in runs %}<tr><td class="nowrap">{{ r.started_at|utc }}</td><td>{{ m.status(r.status) }}</td><td>{{ r.message }}</td>
+  <td>{{ '%.2f'|format(r.value) if r.value is not none else '—' }}</td><td>{{ r.trigger }}</td><td class="nowrap">{{ r.duration_ms }} ms</td></tr>
+  {% else %}<tr><td colspan="6" class="calm">No runs yet.</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+{% endblock %}

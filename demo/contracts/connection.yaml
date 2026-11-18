@@ -1,0 +1,8 @@
+apiVersion: nullwake/v1
+kind: Connection
+metadata:
+  name: retail
+spec:
+  type: postgres
+  # Read-only role created by demo/simulator.py init. The DSN itself lives in the environment.
+  dsnEnv: DEMO_WAREHOUSE_DSN

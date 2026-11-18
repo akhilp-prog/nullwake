@@ -1,0 +1,28 @@
+# .github/workflows/data-contracts.yml in your dbt repository
+name: data-contracts
+on:
+  pull_request:
+    paths: ["contracts/**"]
+  schedule:
+    - cron: "17 6 * * *"
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install "nullwake[snowflake] @ git+https://github.com/<you>/nullwake@v0.1.0"
+      - name: Validate contracts
+        run: nullwake check contracts/ --format json
+        env:
+          SNOWFLAKE_PRIVATE_KEY_FILE: ${{ runner.temp }}/key.p8
+      - name: Apply to Nullwake (main branch only)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          curl -fsS -X POST "$NULLWAKE_URL/api/v1/config/apply" \
+            -H "Authorization: Bearer $NULLWAKE_TOKEN" -H "Content-Type: application/yaml" \
+            --data-binary @<(for f in contracts/*.yaml; do cat "$f"; echo "---"; done)
+        env:
+          NULLWAKE_URL: ${{ vars.NULLWAKE_URL }}
+          NULLWAKE_TOKEN: ${{ secrets.NULLWAKE_TOKEN }}

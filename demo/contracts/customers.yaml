@@ -1,0 +1,21 @@
+apiVersion: nullwake/v1
+kind: DataContract
+metadata:
+  name: customers
+  owner: crm-data@retail.example
+  description: Customer dimension (SCD type 1) used for segmentation and country reporting.
+spec:
+  connection: retail
+  dataset: analytics.dim_customers
+  schedule: {intervalMinutes: 10}
+  schema:
+    columns:
+      - {name: customer_id, type: bigint, nullable: false, unique: true}
+      - {name: email, type: text}
+      - {name: country, type: text, nullable: false}
+      - {name: segment, type: text}
+      - {name: updated_at, type: timestamptz}
+  checks:
+    - name: valid_country_codes
+      sql: select count(*) from analytics.dim_customers where length(country) <> 2
+      maxValue: 0

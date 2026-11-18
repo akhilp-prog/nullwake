@@ -1,0 +1,56 @@
+{% extends "base.html" %}{% import "_macros.html" as m %}
+{% block title %}Incident #{{ incident.id }}{% endblock %}
+{% block content %}
+<a class="back" href="/incidents">← Incidents</a>
+<div class="heading"><div><p class="eyebrow">Incident #{{ incident.id }}</p><h1>{{ incident.title }}</h1>
+  <p>{{ m.sev(incident.severity) }} {{ m.istatus(incident.status) }} <span class="muted">· {{ duration }} {{ 'to resolve' if incident.resolved_at else 'so far' }}</span></p></div></div>
+<div class="grid wide-left">
+  <section class="card">
+    <h2>Timeline</h2>
+    <ol class="timeline">
+      {% for e in incident.events|reverse %}
+      <li class="k-{{ e.kind }}"><div class="t-h"><b>{{ e.kind|replace('_', ' ')|title }}</b><span class="muted">{{ e.actor }} · {{ e.at|utc }}</span></div>{% if e.message %}<p>{{ e.message }}</p>{% endif %}</li>
+      {% endfor %}
+    </ol>
+  </section>
+  <aside class="stackgap">
+    <section class="card">
+      <h2>Details</h2>
+      <dl>
+        <dt>Check</dt><dd><a href="/checks/{{ incident.monitor_id }}">{{ incident.monitor.name }}</a></dd>
+        <dt>Dataset</dt><dd><code>{{ incident.monitor.dataset }}</code></dd>
+        {% if incident.monitor.contract %}<dt>Contract</dt><dd><a href="/contracts/{{ incident.monitor.contract.name }}">{{ incident.monitor.contract.name }}</a> · {{ incident.monitor.contract.owner }}</dd>{% endif %}
+        <dt>Opened</dt><dd>{{ incident.opened_at|utc }}</dd>
+        <dt>Failed runs</dt><dd>{{ incident.failure_count }}</dd>
+        {% if incident.acknowledged_by %}<dt>Acknowledged</dt><dd>{{ incident.acknowledged_by }}, {{ incident.acknowledged_at|ago }}</dd>{% endif %}
+        {% if incident.resolved_at %}<dt>Resolved</dt><dd>{{ incident.resolved_by }}, {{ incident.resolved_at|utc }}</dd>{% endif %}
+      </dl>
+    </section>
+    {% if user.can('editor') and incident.status != 'resolved' %}
+    <section class="card">
+      <h2>Respond</h2>
+      <form method="post" action="/incidents/{{ incident.id }}/note" class="stack">
+        <input type="hidden" name="csrf" value="{{ user.csrf }}">
+        <label>Note<textarea name="note" maxlength="2000" rows="3" placeholder="What you found, who is on it, next update"></textarea></label>
+        <div class="actions">
+          <button formaction="/incidents/{{ incident.id }}/note" class="secondary">Add note</button>
+          {% if incident.status == 'open' %}<button formaction="/incidents/{{ incident.id }}/acknowledge">Acknowledge</button>{% endif %}
+          <button formaction="/incidents/{{ incident.id }}/resolve" class="secondary">Resolve with note</button>
+        </div>
+      </form>
+    </section>
+    {% endif %}
+    <section class="card">
+      <h2>Notifications</h2>
+      {% if deliveries %}<ul class="list compact">{% for d in deliveries %}<li class="row"><span class="grow">{{ d.event }} → {{ d.channel.name }}</span><span class="badge d-{{ d.status }}">{{ d.status }}</span></li>{% endfor %}</ul>
+      {% else %}<p class="muted">No alert channels matched this incident.</p>{% endif %}
+    </section>
+  </aside>
+</div>
+<section class="card">
+  <h2>Recent check runs</h2>
+  <table><thead><tr><th>Time</th><th>Result</th><th>Message</th><th>Duration</th></tr></thead><tbody>
+  {% for r in runs %}<tr><td class="nowrap">{{ r.started_at|utc }}</td><td>{{ m.status(r.status) }}</td><td>{{ r.message }}</td><td class="nowrap">{{ r.duration_ms }} ms</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+{% endblock %}

@@ -1,0 +1,9 @@
+{$NULLWAKE_DOMAIN} {
+	encode zstd gzip
+	# Metrics and readiness are for the internal network / your Prometheus only.
+	@internal path /metrics /readyz
+	respond @internal 404
+	reverse_proxy web:8000 {
+		header_up X-Nullwake-Client {remote_host}
+	}
+}

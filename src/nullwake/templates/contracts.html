@@ -1,0 +1,22 @@
+{% extends "base.html" %}{% import "_macros.html" as m %}
+{% block title %}Contracts{% endblock %}
+{% block content %}
+<div class="heading"><div><p class="eyebrow">Data contracts</p><h1>Contracts</h1>
+<p class="muted">Contracts are YAML in your repository. Apply with <code>nullwake apply</code> or <code>POST /api/v1/config/apply</code>.</p></div></div>
+<section class="card flush">
+<table>
+  <thead><tr><th>Contract</th><th>Dataset</th><th>Owner</th><th>Checks</th><th>Version</th><th>Updated</th></tr></thead>
+  <tbody>
+  {% for c in contracts %}
+  <tr>
+    <td><a href="/contracts/{{ c.name }}"><b>{{ c.name }}</b></a></td>
+    <td><code>{{ c.dataset }}</code><small class="block">{{ c.connection_name }}</small></td>
+    <td>{{ c.owner or '—' }}</td>
+    <td>{% for mon in c.monitors %}<a href="/checks/{{ mon.id }}" class="dot s-{{ mon.last_status or 'pending' }}" title="{{ mon.name }}: {{ mon.last_status or 'pending' }}"></a>{% endfor %}</td>
+    <td>v{{ c.version }}</td><td class="nowrap">{{ c.updated_at|ago }}</td>
+  </tr>
+  {% else %}<tr><td colspan="6" class="calm">No contracts applied yet.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</section>
+{% endblock %}

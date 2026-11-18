@@ -1,0 +1,18 @@
+apiVersion: nullwake/v1
+kind: AlertChannel
+metadata:
+  name: data-oncall-slack
+spec:
+  type: slack
+  urlEnv: SLACK_WEBHOOK_URL
+  minSeverity: warning
+---
+apiVersion: nullwake/v1
+kind: AlertChannel
+metadata:
+  name: pagerduty-bridge
+spec:
+  type: webhook
+  urlEnv: ONCALL_WEBHOOK_URL
+  signingSecretEnv: ONCALL_WEBHOOK_SECRET   # receiver verifies X-Nullwake-Signature
+  minSeverity: critical

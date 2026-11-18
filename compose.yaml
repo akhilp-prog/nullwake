@@ -1,0 +1,84 @@
+# Nullwake single-host deployment: Caddy (TLS) -> web (FastAPI) + worker -> Postgres.
+# Usage: cp .env.example .env && edit; docker compose up -d --build
+# Public demo with a simulated warehouse: docker compose --profile demo up -d --build
+x-app: &app
+  build: .
+  image: nullwake:${NULLWAKE_VERSION:-0.1.0}
+  env_file: .env
+  environment:
+    NULLWAKE_DATABASE_URL: postgresql+psycopg://nullwake:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db/nullwake
+    NULLWAKE_PUBLIC_URL: https://${NULLWAKE_DOMAIN:?set NULLWAKE_DOMAIN in .env}
+    NULLWAKE_CLIENT_IP_HEADER: X-Nullwake-Client
+    DEMO_WAREHOUSE_DSN: host=db dbname=warehouse user=nullwake_reader password=${DEMO_READER_PASSWORD:-unused}
+  restart: unless-stopped
+  read_only: true
+  tmpfs: [/tmp]
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: nullwake
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: nullwake
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./deploy/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nullwake -d nullwake"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    <<: *app
+    command: ["nullwake", "migrate"]
+    restart: "no"
+    depends_on:
+      db: {condition: service_healthy}
+
+  web:
+    <<: *app
+    command: ["nullwake", "serve", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+
+  worker:
+    <<: *app
+    command: ["nullwake", "worker"]
+    healthcheck: {disable: true}
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+
+  proxy:
+    image: caddy:2-alpine
+    environment:
+      NULLWAKE_DOMAIN: ${NULLWAKE_DOMAIN}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web: {condition: service_healthy}
+    restart: unless-stopped
+
+  demo:
+    <<: *app
+    profiles: ["demo"]
+    command: ["sh", "/app/demo/bootstrap.sh"]
+    healthcheck: {disable: true}
+    environment:
+      NULLWAKE_DATABASE_URL: postgresql+psycopg://nullwake:${POSTGRES_PASSWORD}@db/nullwake
+      DEMO_WAREHOUSE_ADMIN_DSN: host=db dbname=warehouse user=nullwake password=${POSTGRES_PASSWORD}
+      DEMO_WAREHOUSE_DSN: host=db dbname=warehouse user=nullwake_reader password=${DEMO_READER_PASSWORD}
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

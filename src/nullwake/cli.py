@@ -1,0 +1,168 @@
+"""`nullwake` command-line interface."""
+from __future__ import annotations
+
+import argparse
+import getpass
+import json
+import sys
+from pathlib import Path
+
+
+def _alembic_config():
+    from alembic.config import Config
+    cfg = Config()
+    cfg.set_main_option("script_location", str(Path(__file__).parent / "migrations"))
+    return cfg
+
+
+def cmd_migrate(args) -> int:
+    from alembic import command
+    command.upgrade(_alembic_config(), "head")
+    print("database is at the latest migration")
+    return 0
+
+
+def cmd_serve(args) -> int:
+    import uvicorn
+    from .config import get_settings
+    from .logging_setup import configure
+    configure(get_settings().log_level)
+    uvicorn.run("nullwake.app:create_app", factory=True, host=args.host, port=args.port, proxy_headers=False,
+                log_config=None, workers=args.workers)
+    return 0
+
+
+def cmd_worker(args) -> int:
+    from .config import get_settings
+    from .logging_setup import configure
+    from .worker import run_forever
+    settings = get_settings()
+    configure(settings.log_level)
+    run_forever(settings, once=args.once)
+    return 0
+
+
+def cmd_user(args) -> int:
+    from .db import session_scope
+    from .security import upsert_user
+    if args.password_stdin:
+        password = sys.stdin.readline().rstrip("\n")
+    else:
+        password = getpass.getpass("Password (14+ characters): ")
+        if password != getpass.getpass("Repeat password: "):
+            print("passwords differ", file=sys.stderr)
+            return 2
+    try:
+        with session_scope() as db:
+            upsert_user(db, args.email, args.role, password, args.name or "")
+            from .engine import audit
+            audit(db, "cli", "user.upsert", f"user/{args.email.lower()}", role=args.role)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    print(f"saved {args.email.lower()} as {args.role}; existing sessions revoked")
+    return 0
+
+
+def cmd_apply(args) -> int:
+    from sqlalchemy import select
+    from .contracts import ContractError, load_bundle
+    from .db import session_scope
+    from .engine import apply_bundle
+    from .models import Connection
+    try:
+        with session_scope() as db:
+            known = dict(db.execute(select(Connection.name, Connection.type)).all())
+            bundle = load_bundle(args.paths, known)
+            if args.dry_run:
+                print(f"valid: {len(bundle.contracts)} contract(s), "
+                      f"{sum(len(c.monitors) for c in bundle.contracts)} check(s)")
+                db.rollback()
+                return 0
+            summary = apply_bundle(db, bundle, args.actor, prune=args.prune)
+    except (ContractError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    for key, items in summary.as_dict().items():
+        for item in items:
+            print(f"{key:>9}  {item}")
+    return 0
+
+
+def cmd_check(args) -> int:
+    """Run contracts directly against the warehouse (no Nullwake server needed). Exit 1 on any failure."""
+    from .connectors import ConnectorError, open_connector
+    from .contracts import ContractError, load_bundle
+    from .monitors import Result, evaluate
+    try:
+        bundle = load_bundle(args.paths)
+    except ContractError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    conns = {c.name: c for c in bundle.connections}
+    contracts = [c for c in bundle.contracts if not args.contract or c.name in args.contract]
+    results, failed = [], False
+    for contract in contracts:
+        conn_def = conns.get(contract.connection)
+        if conn_def is None:
+            print(f"error: contract {contract.name} uses connection '{contract.connection}' which is not in the given files",
+                  file=sys.stderr)
+            return 2
+        try:
+            conn = open_connector(conn_def.name, conn_def.type, conn_def.spec, args.timeout)
+        except ConnectorError as exc:
+            checks = [(m, Result("error", str(exc))) for m in contract.monitors]
+        else:
+            with conn:
+                checks = [(m, evaluate(conn, m.kind, m.dataset, m.params)) for m in contract.monitors]
+        for m, r in checks:
+            failed |= r.status != "pass"
+            results.append({"check": m.name, "kind": m.kind, "severity": m.severity, "status": r.status,
+                            "message": r.message, "value": r.value})
+    if args.format == "json":
+        print(json.dumps({"passed": not failed, "results": results}, indent=2))
+    else:
+        width = max((len(r["check"]) for r in results), default=10)
+        for r in results:
+            mark = {"pass": "PASS", "fail": "FAIL", "error": "ERR "}[r["status"]]
+            print(f"{mark}  {r['check']:<{width}}  {r['message']}")
+        print(f"\n{sum(r['status'] == 'pass' for r in results)}/{len(results)} checks passed")
+    return 1 if failed else 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="nullwake", description="Data reliability that runs inside your network.")
+    sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("migrate", help="apply database migrations").set_defaults(fn=cmd_migrate)
+    p = sub.add_parser("serve", help="run the web UI and API")
+    p.add_argument("--host", default="0.0.0.0")
+    p.add_argument("--port", type=int, default=8000)
+    p.add_argument("--workers", type=int, default=2)
+    p.set_defaults(fn=cmd_serve)
+    p = sub.add_parser("worker", help="run the scheduler/worker loop")
+    p.add_argument("--once", action="store_true", help="run one scheduling pass and exit")
+    p.set_defaults(fn=cmd_worker)
+    p = sub.add_parser("user", help="create or update a user (resets password, revokes sessions)")
+    p.add_argument("email")
+    p.add_argument("--role", choices=("viewer", "editor", "admin"), required=True)
+    p.add_argument("--name")
+    p.add_argument("--password-stdin", action="store_true", help="read the password from stdin")
+    p.set_defaults(fn=cmd_user)
+    p = sub.add_parser("apply", help="apply Connection/DataContract/AlertChannel YAML to the server database")
+    p.add_argument("paths", nargs="+")
+    p.add_argument("--prune", action="store_true", help="delete contracts that are not in the given files")
+    p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--actor", default="cli")
+    p.set_defaults(fn=cmd_apply)
+    p = sub.add_parser("check", help="run contracts directly against the warehouse; exit 1 on failure (CI)")
+    p.add_argument("paths", nargs="+")
+    p.add_argument("--contract", action="append", help="only run this contract (repeatable)")
+    p.add_argument("--format", choices=("text", "json"), default="text")
+    p.add_argument("--timeout", type=int, default=120)
+    p.set_defaults(fn=cmd_check)
+    args = parser.parse_args(argv)
+    return args.fn(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

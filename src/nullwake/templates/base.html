@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}Nullwake{% endblock %} · Nullwake</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+{% if user %}
+<header class="top">
+  <a class="brand" href="/"><span class="mark" aria-hidden="true"></span><span>null<b>wake</b></span></a>
+  {% set p = request.url.path %}
+  <nav>
+    <a href="/" class="{{ 'on' if p == '/' }}">Overview</a>
+    <a href="/incidents" class="{{ 'on' if p.startswith('/incidents') }}">Incidents</a>
+    <a href="/contracts" class="{{ 'on' if p.startswith('/contracts') or p.startswith('/checks') }}">Contracts</a>
+    {% if user.can('admin') %}
+    <a href="/audit" class="{{ 'on' if p.startswith('/audit') }}">Audit log</a>
+    <a href="/settings" class="{{ 'on' if p.startswith('/settings') }}">Settings</a>
+    {% endif %}
+  </nav>
+  <div class="me">
+    <span>{{ user.email }}</span><span class="role">{{ user.role }}</span>
+    <form method="post" action="/logout"><input type="hidden" name="csrf" value="{{ user.csrf }}"><button class="link">Sign out</button></form>
+  </div>
+</header>
+{% endif %}
+<main class="wrap">{% block content %}{% endblock %}</main>
+<footer class="foot">Nullwake {{ version }} · <a href="/api/openapi.json">API reference (OpenAPI)</a></footer>
+</body>
+</html>

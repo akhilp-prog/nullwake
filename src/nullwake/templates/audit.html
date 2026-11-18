@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Audit log{% endblock %}
+{% block content %}
+<div class="heading"><div><p class="eyebrow">Governance</p><h1>Audit log</h1><p class="muted">Every sign-in, config change, acknowledgement and token change. Latest 300 entries.</p></div></div>
+<section class="card flush"><table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Detail</th></tr></thead><tbody>
+{% for r in rows %}<tr><td class="nowrap">{{ r.at|utc }}</td><td>{{ r.actor }}</td><td><code>{{ r.action }}</code></td><td>{{ r.target }}</td>
+<td class="small">{% for k, v in r.detail.items() if v %}<span class="kv">{{ k }}: {{ v|join(', ') if v is iterable and v is not string else v }}</span>{% endfor %}</td></tr>
+{% else %}<tr><td colspan="5" class="calm">Nothing recorded yet.</td></tr>{% endfor %}
+</tbody></table></section>
+{% endblock %}

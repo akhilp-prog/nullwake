@@ -1,0 +1,20 @@
+apiVersion: nullwake/v1
+kind: DataContract
+metadata:
+  name: payments
+  owner: payments-platform@retail.example
+  description: Raw payment events landed by the payments loader. Consumed by the orders model.
+spec:
+  connection: retail
+  dataset: analytics.stg_payments
+  schedule: {intervalMinutes: 2}
+  schema:
+    allowAdditionalColumns: false
+    columns:
+      - {name: payment_id, type: bigint, nullable: false, unique: true}
+      - {name: order_id, type: bigint}
+      - {name: amount, type: numeric}
+      - {name: method, type: text}
+      - {name: paid_at, type: timestamptz}
+      - {name: loaded_at, type: timestamptz}
+  freshness: {column: loaded_at, maxAgeMinutes: 20}

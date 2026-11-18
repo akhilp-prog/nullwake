@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<div class="heading"><div><p class="eyebrow">Administration</p><h1>Settings</h1>
+<p class="muted">Connections and alert channels are managed as code. Secrets are referenced by environment variable name and never stored by Nullwake.</p></div></div>
+{% if new_token %}<div class="alert ok"><b>New API token. Copy it now; it will not be shown again.</b><pre><code>{{ new_token }}</code></pre></div>{% endif %}
+<div class="grid">
+<section class="card"><h2>Connections</h2>
+<table><thead><tr><th>Name</th><th>Type</th><th>Secret references</th></tr></thead><tbody>
+{% for c in connections %}<tr><td><b>{{ c.name }}</b></td><td>{{ c.type }}</td><td>{% for k, v in c.spec.items() if k.endswith('Env') %}<code>{{ v }}</code> {% endfor %}</td></tr>
+{% else %}<tr><td colspan="3" class="calm">None</td></tr>{% endfor %}</tbody></table></section>
+<section class="card"><h2>Alert channels</h2>
+<table><thead><tr><th>Name</th><th>Type</th><th>Minimum severity</th><th>Signed</th></tr></thead><tbody>
+{% for c in channels %}<tr><td><b>{{ c.name }}</b></td><td>{{ c.type }}</td><td>{{ c.min_severity }}</td><td>{{ 'HMAC-SHA256' if c.spec.signingSecretEnv else '—' }}</td></tr>
+{% else %}<tr><td colspan="4" class="calm">None</td></tr>{% endfor %}</tbody></table></section>
+<section class="card"><h2>Scheduler workers</h2>
+<table><thead><tr><th>Worker</th><th>Last heartbeat</th><th>Checks run</th></tr></thead><tbody>
+{% for w in workers %}<tr><td><code>{{ w.worker_id }}</code></td><td>{{ w.heartbeat_at|ago }}</td><td>{{ w.checks_run }}</td></tr>
+{% else %}<tr><td colspan="3" class="calm">No worker has reported yet.</td></tr>{% endfor %}</tbody></table></section>
+<section class="card"><h2>API tokens</h2>
+<form method="post" action="/settings/tokens" class="inline">
+  <input type="hidden" name="csrf" value="{{ user.csrf }}">
+  <input name="name" placeholder="Token name, e.g. ci-github" required maxlength="80">
+  <select name="role"><option>viewer</option><option>editor</option><option>admin</option></select>
+  <button>Create token</button>
+</form>
+<table><thead><tr><th>Name</th><th>Role</th><th>Prefix</th><th>Last used</th><th></th></tr></thead><tbody>
+{% for t in tokens %}<tr><td>{{ t.name }}<small class="block">by {{ t.created_by }}</small></td><td>{{ t.role }}</td><td><code>nw_{{ t.prefix }}_…</code></td><td>{{ t.last_used_at|ago }}</td>
+<td>{% if t.revoked_at %}<span class="muted">revoked</span>{% else %}<form method="post" action="/settings/tokens/{{ t.id }}/revoke"><input type="hidden" name="csrf" value="{{ user.csrf }}"><button class="link danger">Revoke</button></form>{% endif %}</td></tr>
+{% else %}<tr><td colspan="5" class="calm">No tokens.</td></tr>{% endfor %}</tbody></table></section>
+</div>
+{% endblock %}

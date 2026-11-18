@@ -1,0 +1,12 @@
+apiVersion: nullwake/v1
+kind: Connection
+metadata:
+  name: snowflake-prod
+spec:
+  type: snowflake
+  account: xy12345.eu-central-1
+  user: NULLWAKE_SVC
+  role: NULLWAKE_READER
+  warehouse: MONITORING_XS
+  database: ANALYTICS
+  privateKeyFileEnv: SNOWFLAKE_PRIVATE_KEY_FILE   # path to a PKCS#8 key mounted as a secret
