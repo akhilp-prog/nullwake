@@ -7,3 +7,9 @@
 		header_up X-Nullwake-Client {remote_host}
 	}
 }
+
+# Optional extra hostnames (e.g. apex + www) that permanently redirect to the app.
+# Set NULLWAKE_REDIRECT_FROM="example.com, www.example.com" in .env
+{$NULLWAKE_REDIRECT_FROM} {
+	redir https://{$NULLWAKE_DOMAIN}{uri} permanent
+}
