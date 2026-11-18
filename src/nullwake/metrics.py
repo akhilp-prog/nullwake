@@ -7,8 +7,10 @@ from prometheus_client.core import CounterMetricFamily, GaugeMetricFamily
 from prometheus_client.registry import Collector
 from sqlalchemy import func, select
 
+from .config import get_settings
 from .db import session_factory
 from .models import AlertDelivery, CheckRun, Incident, Monitor, WorkerHeartbeat, utcnow
+from .watchdog import overdue_checks, stalled_deliveries
 
 STATUS = func.coalesce(Monitor.last_status, "pending").label("status")
 
@@ -41,3 +43,11 @@ class NullwakeCollector(Collector):
             age = GaugeMetricFamily("nullwake_worker_heartbeat_age_seconds", "Seconds since any worker heartbeat")
             age.add_metric([], (utcnow() - newest).total_seconds() if newest else float("inf"))
             yield age
+            overdue = GaugeMetricFamily("nullwake_checks_overdue",
+                                        "Enabled checks past due by more than the watchdog grace, with no live lease")
+            overdue.add_metric([], overdue_checks(db, get_settings().watchdog_grace_seconds))
+            yield overdue
+            stalled = GaugeMetricFamily("nullwake_alert_deliveries_stalled",
+                                        "Alerts pending for over 15 minutes or failed in the last day")
+            stalled.add_metric([], stalled_deliveries(db))
+            yield stalled

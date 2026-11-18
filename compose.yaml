@@ -49,7 +49,14 @@ services:
   worker:
     <<: *app
     command: ["nullwake", "worker"]
-    healthcheck: {disable: true}
+    # Unhealthy if this container's worker has not reported in. A stuck loop also exits by itself (stall watchdog),
+    # so `restart: unless-stopped` brings it back. NULLWAKE_DEADMAN_URL adds an outbound ping for an external monitor.
+    healthcheck:
+      test: ["CMD", "nullwake", "worker-health"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 60s
     depends_on:
       migrate: {condition: service_completed_successfully}
 

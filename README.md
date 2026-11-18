@@ -27,15 +27,20 @@ someone notices. Nullwake makes the producer's promises explicit and checks them
   in pull requests and are applied with `nullwake apply` or `POST /api/v1/config/apply`.
 - **Read-only by construction.** Postgres checks run in `READ ONLY` transactions with a statement timeout;
   identifiers are validated, never interpolated from free text; custom SQL must be a single `SELECT`.
-  Only aggregates leave the warehouse. No rows are copied.
+  Only aggregates leave the warehouse. No rows are copied. If you enable Slack or webhook alerts, those messages
+  carry check, dataset and owner names and the aggregate values; see [what leaves the network](docs/security.md#what-leaves-the-network).
 - **Secrets never stored.** Connections reference environment variables (`dsnEnv: WAREHOUSE_DSN`). Inline
   secrets are rejected at validation time.
 - **Incidents, not alert spam.** One active incident per failing check (enforced by a partial unique index),
   deduplicated repeats, a timeline of every change, acknowledgement and notes, and automatic resolution.
 - **Reliable alerting.** Slack and signed webhooks (HMAC-SHA256) are queued in a transactional outbox and
   retried with exponential backoff, so an alert is never lost to a crash between "incident opened" and "sent".
-- **Horizontally scalable worker.** Due checks are claimed with `FOR UPDATE SKIP LOCKED`; run as many worker
-  replicas as you need without double-running a check.
+- **Horizontally scalable worker.** A due check is claimed with an expiring lease (`FOR UPDATE SKIP LOCKED` keeps
+  two workers off the same row). Runs never overlap while a lease is live, and a crashed worker's checks are
+  reclaimed when its lease expires.
+- **Watches itself.** `/watchdog` returns 503 when no worker has reported in, checks are overdue or alert delivery
+  is stuck, for an external uptime monitor; an optional outbound ping (`NULLWAKE_DEADMAN_URL`) works as a dead
+  man's switch. A worker whose loop stalls exits and is restarted.
 - **CI gate.** `nullwake check contracts/` runs every contract directly against the warehouse and exits
   non-zero on failure. No server is needed, so it drops into GitHub Actions after `dbt build`.
 - **Operable.** `/healthz`, `/readyz` (database + migration state), Prometheus `/metrics`, JSON logs,
@@ -51,7 +56,7 @@ flowchart LR
     WH[(Warehouse<br/>Postgres · Snowflake · BigQuery)]
     subgraph nw["Nullwake (Docker Compose / any container platform)"]
       P[Caddy<br/>TLS] --> W[Web + REST API<br/>FastAPI]
-      K[Worker replicas<br/>SKIP LOCKED scheduler] -->|read-only role,<br/>aggregates only| WH
+      K[Worker replicas<br/>leased scheduler] -->|read-only role,<br/>aggregates only| WH
       W --> DB[(Metadata Postgres)]
       K --> DB
     end

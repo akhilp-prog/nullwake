@@ -97,6 +97,9 @@ class Monitor(Base):
     last_status: Mapped[str | None] = mapped_column(String(10))
     last_message: Mapped[str] = mapped_column(Text, default="")
     state: Mapped[dict] = mapped_column(JSONB, default=dict)
+    # Lease held by the worker that is running this check. A crashed worker's lease expires and the check is reclaimed.
+    lease_owner: Mapped[str | None] = mapped_column(String(120))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     contract: Mapped[Contract | None] = relationship(back_populates="monitors")
 
     __table_args__ = (Index("ix_monitors_due", "enabled", "next_run_at"),)

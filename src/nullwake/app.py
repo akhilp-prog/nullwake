@@ -19,6 +19,7 @@ from .config import get_settings
 from .db import session_factory
 from .metrics import NullwakeCollector
 from .models import WorkerHeartbeat, utcnow
+from .watchdog import monitoring_status
 from .web import LoginRequired, render
 from .web import router as web_router
 
@@ -100,6 +101,16 @@ def create_app() -> FastAPI:
         worker_age = (utcnow() - beat).total_seconds() if beat else None
         return {"ready": True, "version": __version__, "migration": current,
                 "workerHeartbeatAgeSeconds": round(worker_age, 1) if worker_age is not None else None}
+
+    @app.get("/watchdog", include_in_schema=False)
+    def watchdog():
+        """For an external uptime monitor: 503 when Nullwake has stopped watching. Counts only, no names."""
+        try:
+            with session_factory()() as db:
+                status = monitoring_status(db, get_settings())
+        except Exception as exc:
+            return JSONResponse({"ok": False, "problems": [f"database: {exc.__class__.__name__}"]}, 503)
+        return JSONResponse(status, 200 if status["ok"] else 503)
 
     @app.get("/metrics", include_in_schema=False)
     def metrics():

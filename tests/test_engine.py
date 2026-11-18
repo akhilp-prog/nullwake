@@ -120,7 +120,7 @@ def test_claim_due_skips_rows_locked_by_another_worker(db, tmp_path):
     with factory() as other:
         assert len(claim_due(other, 10)) == 1
     with factory() as other:
-        assert claim_due(other, 10) == []  # next_run_at was pushed forward
+        assert claim_due(other, 10) == []  # the first claim holds a live lease
 
 
 def test_execute_runs_against_warehouse_and_records(db, wh, tmp_path):

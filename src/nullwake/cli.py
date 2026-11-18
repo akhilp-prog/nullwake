@@ -42,6 +42,28 @@ def cmd_worker(args) -> int:
     return 0
 
 
+def cmd_worker_health(args) -> int:
+    """Container health check: exit 0 only if a worker process on this host reported in recently."""
+    import socket
+
+    from sqlalchemy import func, select
+
+    from .config import get_settings
+    from .db import session_factory
+    from .models import WorkerHeartbeat, utcnow
+    settings = get_settings()
+    max_age = args.max_age or settings.stall_seconds + 60
+    with session_factory()() as db:
+        beat = db.scalar(select(func.max(WorkerHeartbeat.heartbeat_at))
+                         .where(WorkerHeartbeat.worker_id.like(f"{socket.gethostname()}:%")))
+    age = (utcnow() - beat).total_seconds() if beat else None
+    if age is None or age > max_age:
+        print(f"unhealthy: last heartbeat {'never' if age is None else f'{age:.0f}s ago'} (max {max_age}s)")
+        return 1
+    print(f"healthy: last heartbeat {age:.0f}s ago")
+    return 0
+
+
 def cmd_user(args) -> int:
     from .db import session_scope
     from .security import upsert_user
@@ -137,11 +159,14 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("serve", help="run the web UI and API")
     p.add_argument("--host", default="0.0.0.0")
     p.add_argument("--port", type=int, default=8000)
-    p.add_argument("--workers", type=int, default=2)
+    p.add_argument("--workers", type=int, default=1)
     p.set_defaults(fn=cmd_serve)
     p = sub.add_parser("worker", help="run the scheduler/worker loop")
     p.add_argument("--once", action="store_true", help="run one scheduling pass and exit")
     p.set_defaults(fn=cmd_worker)
+    p = sub.add_parser("worker-health", help="exit 0 if this host's worker reported in recently (container health)")
+    p.add_argument("--max-age", type=int, default=0, help="seconds; default: the stall limit + 60")
+    p.set_defaults(fn=cmd_worker_health)
     p = sub.add_parser("user", help="create or update a user (resets password, revokes sessions)")
     p.add_argument("email")
     p.add_argument("--role", choices=("viewer", "editor", "admin"), required=True)

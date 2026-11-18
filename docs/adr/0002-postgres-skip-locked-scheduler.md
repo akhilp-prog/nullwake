@@ -6,8 +6,13 @@
 Customer deployments should need as few moving parts as possible.
 
 **Decision.** The metadata Postgres is the queue. Workers claim due checks with
-`SELECT … FOR UPDATE SKIP LOCKED`, advance `next_run_at`, commit, then run the check. Alert deliveries use the same
-pattern as a transactional outbox.
+`SELECT … FOR UPDATE SKIP LOCKED`, take an expiring lease on each (owner + expiry), commit, run the check, then set
+`next_run_at` and release the lease in the transaction that records the result. Alert deliveries use the same
+`SKIP LOCKED` pattern as a transactional outbox.
+
+*Amended for v0.2.* v0.1 advanced `next_run_at` at claim time. A review showed that a worker crash then skipped the
+claimed run until the next interval, and a run longer than its interval could be started again by another worker.
+Leases close both gaps; delivery remains at-least-once (see architecture.md).
 
 **Consequences.** No Redis/Kafka/Celery to operate or secure. Throughput is ample for thousands of checks per minute,
 far beyond a single team's needs. If that ceiling is reached, the claim function is the only seam to replace.

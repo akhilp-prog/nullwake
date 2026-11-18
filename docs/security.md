@@ -4,8 +4,27 @@
 
 - Nullwake stores **metadata and aggregates only**: row counts, ages, null counts, duplicate counts, column names and
   types, assertion results. No warehouse rows are copied to the metadata store, logs or alerts.
+- Query load: checks are read-only but still use warehouse resources. Grant `SELECT` on the contracted tables only
+  (not whole schemas) where you can, give Nullwake its own small warehouse or resource group, and measure check
+  durations (`check_runs.duration_ms`) against a representative workload before widening the rollout.
 - Custom assertions must be a single `SELECT`/`WITH` statement returning one number. This lexical guard is defense
   in depth; the security boundary is the warehouse role below.
+
+## What leaves the network
+
+With no alert channels configured, nothing leaves the deployment: the web UI, API and metadata store all run inside
+it. Each enabled channel sends the following to its destination (Slack's servers, or your webhook URL):
+
+| Field | Example |
+| --- | --- |
+| Check, contract and dataset names | `orders.freshness`, `analytics.fct_orders` |
+| Contract owner | `commerce-data@retail.example` |
+| Severity, status, timestamps | `critical`, `opened`, `2026-11-18T09:29:00Z` |
+| Check message with aggregate values | `Data is 3 h old (limit 20 min)`, `412 rows, below the expected 6,500–13,500` |
+| Link back to the incident | `https://nullwake.internal/incidents/42` |
+
+No warehouse rows, column values or credentials are sent. If dataset or owner names are themselves sensitive, use a
+webhook to a receiver inside your network instead of Slack. The `/watchdog` endpoint exposes counts only.
 
 ## Read-only warehouse access
 
@@ -75,3 +94,5 @@ through a proxy that overwrites the header.
 - Local accounts only; OIDC SSO is on the roadmap. Put Nullwake behind your identity-aware proxy if SSO is required today.
 - Single organization per deployment (no multi-tenancy).
 - `/metrics` and `/readyz` are unauthenticated and blocked at the bundled proxy; expose them only on internal networks.
+- Single host as bundled: no high availability. Agree recovery targets with each customer, and test an encrypted
+  off-host restore and a failed-upgrade rollback before production.

@@ -26,7 +26,20 @@ class Settings:
     demo_user: str = ""
     demo_password: str = ""
     log_level: str = "INFO"
+    lease_seconds_override: int = 0
+    deadman_url: str = ""
+    watchdog_grace_seconds: int = 300
     extra: dict = field(default_factory=dict)
+
+    @property
+    def lease_seconds(self) -> int:
+        """How long a claimed run is protected. A check runs a few bounded queries, so 3x the query timeout + 60s."""
+        return self.lease_seconds_override or max(120, 3 * self.query_timeout_seconds + 60)
+
+    @property
+    def stall_seconds(self) -> int:
+        """A worker loop that makes no progress for this long exits so Docker restarts it."""
+        return self.lease_seconds + 120
 
     @property
     def secure_cookies(self) -> bool:
@@ -54,6 +67,9 @@ def load_settings() -> Settings:
         demo_user=os.environ.get("NULLWAKE_DEMO_USER", ""),
         demo_password=os.environ.get("NULLWAKE_DEMO_PASSWORD", ""),
         log_level=os.environ.get("NULLWAKE_LOG_LEVEL", "INFO").upper(),
+        lease_seconds_override=int(os.environ.get("NULLWAKE_WORKER_LEASE_SECONDS", "0")),
+        deadman_url=os.environ.get("NULLWAKE_DEADMAN_URL", ""),
+        watchdog_grace_seconds=int(os.environ.get("NULLWAKE_WATCHDOG_GRACE_SECONDS", "300")),
     )
 
 
