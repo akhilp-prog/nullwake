@@ -157,4 +157,4 @@ adapters are implemented and their SQL generation is unit-tested, but they have 
 accounts. Planned next: OIDC single sign-on, PagerDuty/Opsgenie channels, dbt `manifest.json` import to generate
 contracts, a Helm chart, and per-team routing.
 
-Built by [Akhil Varma](https://www.linkedin.com/in/akhil-varma-8bbab842a/).
+Built by [Akhil Pettem](https://www.linkedin.com/in/akhil-p-8bbab842a/).
