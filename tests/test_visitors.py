@@ -14,12 +14,14 @@ NOW = datetime(2026, 11, 19, 12, 0, tzinfo=timezone.utc)
 BROWSER = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130"
 
 
-def line(ts, uri, method="GET", status=200, ip="203.0.113.0", agent=BROWSER, referer=None):
+def line(ts, uri, method="GET", status=200, ip="203.0.113.0", agent=BROWSER, referer=None, host=None):
     headers = {"User-Agent": [agent]} if agent else {}
     if referer:
         headers["Referer"] = [referer]
-    return json.dumps({"ts": ts.timestamp(), "status": status,
-                       "request": {"method": method, "uri": uri, "client_ip": ip, "headers": headers}}) + "\n"
+    req = {"method": method, "uri": uri, "client_ip": ip, "headers": headers}
+    if host:
+        req["host"] = host
+    return json.dumps({"ts": ts.timestamp(), "status": status, "request": req}) + "\n"
 
 
 def test_counts_visitors_views_sign_ins_and_referrers(tmp_path):
@@ -96,3 +98,19 @@ def test_malformed_referrer_does_not_break_the_report(tmp_path):
                    line(NOW - timedelta(hours=1), "/login", ip="198.51.100.0", referer="https://lnkd.in/abc"))
     stats = visitors.compute(str(log), "app.example", days=7, now=NOW)
     assert stats.visitors == 2 and dict(stats.referrers) == {"linkedin.com": 1}
+
+
+def test_marketing_site_pages_are_kept_apart_from_app_pages(tmp_path):
+    log = tmp_path / "access.log"
+    t = NOW - timedelta(hours=1)
+    log.write_text("".join([
+        line(t, "/", host="nullwake.si", referer="https://www.linkedin.com/feed/"),
+        line(t, "/site.css", host="nullwake.si"), line(t, "/fonts/x.woff2", host="nullwake.si"),  # assets
+        line(t, "/img/overview.webp", host="nullwake.si"),
+        line(t, "/", host="app.nullwake.si:443", referer="https://nullwake.si/"),   # site -> demo click-through
+        line(t, "/login", method="POST", status=303, host="nullwake.si"),          # not an app sign-in
+    ]))
+    s = visitors.compute(str(log), "app.nullwake.si", days=30, now=NOW)
+    assert dict(s.pages) == {"nullwake.si/": 1, "/": 1}
+    assert s.page_views == 2 and s.demo_sign_ins == 0
+    assert dict(s.referrers) == {"linkedin.com": 1, "nullwake.si": 1}

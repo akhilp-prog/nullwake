@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nullwake: data contracts that run inside your network</title>
+<meta name="description" content="Nullwake checks your warehouse tables against data contracts written in YAML (freshness, volume, schema, nulls, duplicates and your own SQL rules), opens an incident when one breaks and closes it when the data is healthy. Self-hosted, read-only, open source.">
+<link rel="canonical" href="https://nullwake.si/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/site.css">
+<meta name="theme-color" content="#10162B">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://nullwake.si/">
+<meta property="og:title" content="Nullwake: data contracts that run inside your network">
+<meta property="og:description" content="Know your data broke before anyone opens the dashboard. Freshness, volume, schema and data quality checks for Postgres, Snowflake and BigQuery, self-hosted and read-only.">
+<meta property="og:image" content="https://nullwake.si/img/og.png">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <nav class="nav wrap" aria-label="Main">
+    <a class="logo" href="/" aria-label="Nullwake home"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="4"/><circle cx="16" cy="16" r="3.4" fill="currentColor"/></svg>nullwake</a>
+    <ul>
+      <li><a href="#how">How it works</a></li>
+      <li><a href="#security">Security</a></li>
+      <li><a href="#pilot">Pilot</a></li>
+      <li><a href="#about">About</a></li>
+    </ul>
+    <a class="nav-demo" href="https://app.nullwake.si/">Live demo</a>
+  </nav>
+
+  <div class="wrap hero-copy">
+    <h1>Know your data broke before anyone opens the dashboard.</h1>
+    <p class="lede">Nullwake checks your warehouse tables against data contracts written in YAML. When a table goes stale, shrinks, changes shape or breaks a business rule, it opens an incident, alerts the team that owns it, and closes the incident once the data is healthy again. It runs inside your network and reads only counts and aggregates.</p>
+    <div class="hero-act">
+      <p class="ctas">
+        <a class="btn btn-primary" href="mailto:hello@nullwake.si?subject=Nullwake%20pilot">Book a pilot call</a>
+        <a class="btn btn-ghost" href="https://app.nullwake.si/">Open the live demo</a>
+      </p>
+      <p class="works">Works with Postgres, Snowflake and BigQuery (beta). Open source under Apache 2.0.</p>
+    </div>
+  </div>
+
+  <figure class="wrap watch">
+    <figcaption class="watch-cap">
+      <span class="watch-title">One night on <code>analytics.fct_orders</code></span>
+      <span class="legend"><i class="d p"></i>Check passed <i class="d f"></i>Check failed</span>
+    </figcaption>
+    <div class="watch-body">
+      <div class="tl" role="img" aria-label="Six checks on analytics.fct_orders ran every 15 minutes from midnight to 6 am. All passed except freshness, which failed at 02:15 and 02:30 and passed again at 02:45.">
+<div class="tl-band" aria-hidden="true"><span>Incident open, 30 min</span></div>
+<div class="tl-head" aria-hidden="true"></div>
+<div class="tl-tick h0" aria-hidden="true">00:00</div>
+<div class="tl-tick" aria-hidden="true"></div>
+<div class="tl-tick" aria-hidden="true"></div>
+<div class="tl-tick" aria-hidden="true"></div>
+<div class="tl-tick h1" aria-hidden="true">01:00</div>
+<div class="tl-tick" aria-hidden="true"></div>
+<div class="tl-tick" aria-hidden="true"></div>
+<div class="tl-tick" aria-hidden="true"></div>
+<div class="tl-tick h2" aria-hidden="true">02:00</div>
+<div class="tl-tick" aria-hidden="true"></div>
+<div class="tl-tick" aria-hidden="true"></div>
+<div class="tl-tick" aria-hidden="true"></div>
+<div class="tl-tick h3" aria-hidden="true">03:00</div>
+<div class="tl-tick" aria-hidden="true"></div>
+<div class="tl-tick" aria-hidden="true"></div>
+<div class="tl-tick" aria-hidden="true"></div>
+<div class="tl-tick h4" aria-hidden="true">04:00</div>
+<div class="tl-tick" aria-hidden="true"></div>
+<div class="tl-tick" aria-hidden="true"></div>
+<div class="tl-tick" aria-hidden="true"></div>
+<div class="tl-tick h5" aria-hidden="true">05:00</div>
+<div class="tl-tick" aria-hidden="true"></div>
+<div class="tl-tick" aria-hidden="true"></div>
+<div class="tl-tick" aria-hidden="true"></div>
+<div class="tl-tick h6" aria-hidden="true">06:00</div>
+<div class="tl-label" aria-hidden="true">Freshness</div>
+<i class="d p c0" aria-hidden="true"></i>
+<i class="d p c1" aria-hidden="true"></i>
+<i class="d p c2" aria-hidden="true"></i>
+<i class="d p c3" aria-hidden="true"></i>
+<i class="d p c4" aria-hidden="true"></i>
+<i class="d p c5" aria-hidden="true"></i>
+<i class="d p c6" aria-hidden="true"></i>
+<i class="d p c7" aria-hidden="true"></i>
+<i class="d p c8" aria-hidden="true"></i>
+<i class="d f c9" aria-hidden="true"></i>
+<i class="d f c10" aria-hidden="true"></i>
+<i class="d p c11" aria-hidden="true"></i>
+<i class="d p c12" aria-hidden="true"></i>
+<i class="d p c13" aria-hidden="true"></i>
+<i class="d p c14" aria-hidden="true"></i>
+<i class="d p c15" aria-hidden="true"></i>
+<i class="d p c16" aria-hidden="true"></i>
+<i class="d p c17" aria-hidden="true"></i>
+<i class="d p c18" aria-hidden="true"></i>
+<i class="d p c19" aria-hidden="true"></i>
+<i class="d p c20" aria-hidden="true"></i>
+<i class="d p c21" aria-hidden="true"></i>
+<i class="d p c22" aria-hidden="true"></i>
+<i class="d p c23" aria-hidden="true"></i>
+<i class="d p c24" aria-hidden="true"></i>
+<div class="tl-label" aria-hidden="true">Volume</div>
+<i class="d p c0" aria-hidden="true"></i>
+<i class="d p c1" aria-hidden="true"></i>
+<i class="d p c2" aria-hidden="true"></i>
+<i class="d p c3" aria-hidden="true"></i>
+<i class="d p c4" aria-hidden="true"></i>
+<i class="d p c5" aria-hidden="true"></i>
+<i class="d p c6" aria-hidden="true"></i>
+<i class="d p c7" aria-hidden="true"></i>
+<i class="d p c8" aria-hidden="true"></i>
+<i class="d p c9" aria-hidden="true"></i>
+<i class="d p c10" aria-hidden="true"></i>
+<i class="d p c11" aria-hidden="true"></i>
+<i class="d p c12" aria-hidden="true"></i>
+<i class="d p c13" aria-hidden="true"></i>
+<i class="d p c14" aria-hidden="true"></i>
+<i class="d p c15" aria-hidden="true"></i>
+<i class="d p c16" aria-hidden="true"></i>
+<i class="d p c17" aria-hidden="true"></i>
+<i class="d p c18" aria-hidden="true"></i>
+<i class="d p c19" aria-hidden="true"></i>
+<i class="d p c20" aria-hidden="true"></i>
+<i class="d p c21" aria-hidden="true"></i>
+<i class="d p c22" aria-hidden="true"></i>
+<i class="d p c23" aria-hidden="true"></i>
+<i class="d p c24" aria-hidden="true"></i>
+<div class="tl-label" aria-hidden="true">Schema</div>
+<i class="d p c0" aria-hidden="true"></i>
+<i class="d p c1" aria-hidden="true"></i>
+<i class="d p c2" aria-hidden="true"></i>
+<i class="d p c3" aria-hidden="true"></i>
+<i class="d p c4" aria-hidden="true"></i>
+<i class="d p c5" aria-hidden="true"></i>
+<i class="d p c6" aria-hidden="true"></i>
+<i class="d p c7" aria-hidden="true"></i>
+<i class="d p c8" aria-hidden="true"></i>
+<i class="d p c9" aria-hidden="true"></i>
+<i class="d p c10" aria-hidden="true"></i>
+<i class="d p c11" aria-hidden="true"></i>
+<i class="d p c12" aria-hidden="true"></i>
+<i class="d p c13" aria-hidden="true"></i>
+<i class="d p c14" aria-hidden="true"></i>
+<i class="d p c15" aria-hidden="true"></i>
+<i class="d p c16" aria-hidden="true"></i>
+<i class="d p c17" aria-hidden="true"></i>
+<i class="d p c18" aria-hidden="true"></i>
+<i class="d p c19" aria-hidden="true"></i>
+<i class="d p c20" aria-hidden="true"></i>
+<i class="d p c21" aria-hidden="true"></i>
+<i class="d p c22" aria-hidden="true"></i>
+<i class="d p c23" aria-hidden="true"></i>
+<i class="d p c24" aria-hidden="true"></i>
+<div class="tl-label" aria-hidden="true">Unique order_id</div>
+<i class="d p c0" aria-hidden="true"></i>
+<i class="d p c1" aria-hidden="true"></i>
+<i class="d p c2" aria-hidden="true"></i>
+<i class="d p c3" aria-hidden="true"></i>
+<i class="d p c4" aria-hidden="true"></i>
+<i class="d p c5" aria-hidden="true"></i>
+<i class="d p c6" aria-hidden="true"></i>
+<i class="d p c7" aria-hidden="true"></i>
+<i class="d p c8" aria-hidden="true"></i>
+<i class="d p c9" aria-hidden="true"></i>
+<i class="d p c10" aria-hidden="true"></i>
+<i class="d p c11" aria-hidden="true"></i>
+<i class="d p c12" aria-hidden="true"></i>
+<i class="d p c13" aria-hidden="true"></i>
+<i class="d p c14" aria-hidden="true"></i>
+<i class="d p c15" aria-hidden="true"></i>
+<i class="d p c16" aria-hidden="true"></i>
+<i class="d p c17" aria-hidden="true"></i>
+<i class="d p c18" aria-hidden="true"></i>
+<i class="d p c19" aria-hidden="true"></i>
+<i class="d p c20" aria-hidden="true"></i>
+<i class="d p c21" aria-hidden="true"></i>
+<i class="d p c22" aria-hidden="true"></i>
+<i class="d p c23" aria-hidden="true"></i>
+<i class="d p c24" aria-hidden="true"></i>
+<div class="tl-label" aria-hidden="true">No null customer_id</div>
+<i class="d p c0" aria-hidden="true"></i>
+<i class="d p c1" aria-hidden="true"></i>
+<i class="d p c2" aria-hidden="true"></i>
+<i class="d p c3" aria-hidden="true"></i>
+<i class="d p c4" aria-hidden="true"></i>
+<i class="d p c5" aria-hidden="true"></i>
+<i class="d p c6" aria-hidden="true"></i>
+<i class="d p c7" aria-hidden="true"></i>
+<i class="d p c8" aria-hidden="true"></i>
+<i class="d p c9" aria-hidden="true"></i>
+<i class="d p c10" aria-hidden="true"></i>
+<i class="d p c11" aria-hidden="true"></i>
+<i class="d p c12" aria-hidden="true"></i>
+<i class="d p c13" aria-hidden="true"></i>
+<i class="d p c14" aria-hidden="true"></i>
+<i class="d p c15" aria-hidden="true"></i>
+<i class="d p c16" aria-hidden="true"></i>
+<i class="d p c17" aria-hidden="true"></i>
+<i class="d p c18" aria-hidden="true"></i>
+<i class="d p c19" aria-hidden="true"></i>
+<i class="d p c20" aria-hidden="true"></i>
+<i class="d p c21" aria-hidden="true"></i>
+<i class="d p c22" aria-hidden="true"></i>
+<i class="d p c23" aria-hidden="true"></i>
+<i class="d p c24" aria-hidden="true"></i>
+<div class="tl-label" aria-hidden="true">No negative amounts</div>
+<i class="d p c0" aria-hidden="true"></i>
+<i class="d p c1" aria-hidden="true"></i>
+<i class="d p c2" aria-hidden="true"></i>
+<i class="d p c3" aria-hidden="true"></i>
+<i class="d p c4" aria-hidden="true"></i>
+<i class="d p c5" aria-hidden="true"></i>
+<i class="d p c6" aria-hidden="true"></i>
+<i class="d p c7" aria-hidden="true"></i>
+<i class="d p c8" aria-hidden="true"></i>
+<i class="d p c9" aria-hidden="true"></i>
+<i class="d p c10" aria-hidden="true"></i>
+<i class="d p c11" aria-hidden="true"></i>
+<i class="d p c12" aria-hidden="true"></i>
+<i class="d p c13" aria-hidden="true"></i>
+<i class="d p c14" aria-hidden="true"></i>
+<i class="d p c15" aria-hidden="true"></i>
+<i class="d p c16" aria-hidden="true"></i>
+<i class="d p c17" aria-hidden="true"></i>
+<i class="d p c18" aria-hidden="true"></i>
+<i class="d p c19" aria-hidden="true"></i>
+<i class="d p c20" aria-hidden="true"></i>
+<i class="d p c21" aria-hidden="true"></i>
+<i class="d p c22" aria-hidden="true"></i>
+<i class="d p c23" aria-hidden="true"></i>
+<i class="d p c24" aria-hidden="true"></i>
+<div class="tl-track" aria-hidden="true"><b class="tl-playhead"></b></div>
+</div>
+
+      <ol class="log">
+        <li class="ev e1"><time>00:44</time><p>The last batch of orders loads. Then the loader stalls without an error.</p></li>
+        <li class="ev e2 bad"><time>02:15</time><p>Freshness fails: the newest row is 91 minutes old, over the 90-minute limit. Incident #31 opens and <b>#data-oncall</b> gets a Slack alert.</p></li>
+        <li class="ev e3"><time>02:38</time><p>On-call acknowledges the incident and restarts the loader.</p></li>
+        <li class="ev e4 good"><time>02:45</time><p>Freshness passes. Incident #31 resolves itself after 30 minutes.</p></li>
+        <li class="ev e5"><time>06:00</time><p>The morning dashboards are right. Nobody has to explain a wrong number.</p></li>
+      </ol>
+    </div>
+  </figure>
+</header>
+
+<main id="main">
+
+<section class="sec wrap" id="catches" aria-labelledby="catches-h">
+  <div class="sec-head">
+    <h2 id="catches-h">What it catches</h2>
+    <p>Most data incidents are found by the person reading the dashboard. A loader stalls overnight, an upstream team renames a column, a backfill doubles a day of payments. Nullwake turns each of those into a promise the producer writes down and a check that runs on schedule.</p>
+  </div>
+  <div class="ledger" role="table" aria-label="Contract terms, what Nullwake checks, and what each catches">
+    <div class="lrow lhead" role="row"><span role="columnheader">In the contract</span><span role="columnheader">Nullwake checks</span><span role="columnheader">Catches</span></div>
+    <div class="lrow" role="row"><code role="cell">freshness: {maxAgeMinutes: 90}</code><span role="cell">Age of the newest row, and timestamps that sit in the future</span><span role="cell">Stalled or failed loads</span></div>
+    <div class="lrow" role="row"><code role="cell">volume: {windowHours: 24}</code><span role="cell">Rows in the latest window against a robust baseline of earlier windows</span><span role="cell">Partial loads, duplicated backfills</span></div>
+    <div class="lrow" role="row"><code role="cell">schema: {columns: [...]}</code><span role="cell">The live table definition against the contract</span><span role="cell">Renamed, dropped or retyped columns</span></div>
+    <div class="lrow" role="row"><code role="cell">nullable: false, uniqueKey</code><span role="cell">Null counts and duplicate keys</span><span role="cell">Broken joins, replayed events</span></div>
+    <div class="lrow" role="row"><code role="cell">checks: [{sql: ...}]</code><span role="cell">Any business rule you can write as a single SELECT</span><span role="cell">Negative amounts, orphan rows, bad codes</span></div>
+  </div>
+</section>
+
+<section class="sec wrap" id="how" aria-labelledby="how-h">
+  <div class="sec-head">
+    <h2 id="how-h">How it works</h2>
+    <p>Contracts live in your repository next to your dbt models and change through pull requests, like the rest of your code.</p>
+  </div>
+  <div class="how">
+    <ol class="steps">
+      <li><h3>Write the contract</h3><p>One YAML file per table: who owns it, how fresh it must be, its columns, its keys and any rules of your own.</p></li>
+      <li><h3>Apply it from CI</h3><p><code>nullwake apply contracts/</code> loads the contracts. <code>nullwake check</code> can also run every contract straight after <code>dbt build</code> and fail the pipeline, with no server needed.</p></li>
+      <li><h3>Checks run on schedule</h3><p>Workers run each check on its own interval through a read-only warehouse role, with a statement timeout on every query.</p></li>
+      <li><h3>Incidents open and close themselves</h3><p>A failing check opens one incident, not a stream of alerts. The owning team hears about it in Slack or through a signed webhook, can acknowledge it and add notes, and the incident closes when the check passes again.</p></li>
+    </ol>
+    <div class="code" role="region" aria-label="Example data contract">
+      <div class="code-bar">contracts/orders.yaml</div>
+<pre tabindex="0"><code><span class="k">apiVersion:</span> nullwake/v1
+<span class="k">kind:</span> DataContract
+<span class="k">metadata:</span>
+  <span class="k">name:</span> orders
+  <span class="k">owner:</span> commerce-data@example.com
+<span class="k">spec:</span>
+  <span class="k">connection:</span> warehouse
+  <span class="k">dataset:</span> analytics.fct_orders
+  <span class="k">schedule:</span> {intervalMinutes: 15}
+  <span class="k">schema:</span>
+    <span class="k">columns:</span>
+      - {name: order_id, type: bigint, nullable: false}
+      - {name: amount, type: numeric}
+      - {name: loaded_at, type: timestamptz}
+  <span class="k">uniqueKey:</span> [order_id]
+  <span class="k">freshness:</span> {column: loaded_at, maxAgeMinutes: 90}
+  <span class="k">volume:</span> {column: loaded_at, windowHours: 24}
+  <span class="k">checks:</span>
+    - <span class="k">name:</span> no_negative_amounts
+      <span class="k">sql:</span> select count(*) from analytics.fct_orders
+           where amount &lt; 0</code></pre>
+    </div>
+  </div>
+  <figure class="shot">
+    <div class="shot-frame"><img src="/img/overview.webp" width="1360" height="700" decoding="async" alt="The Nullwake overview page: two active incidents on orders and payments, 14 of 16 checks passing, and a list of contracts with their pass counts."></div>
+    <figcaption>The overview in the <a href="https://app.nullwake.si/">live demo</a>, where a simulated retail warehouse breaks on a schedule and heals again.</figcaption>
+  </figure>
+</section>
+
+<section class="sec wrap" id="security" aria-labelledby="security-h">
+  <div class="sec-head">
+    <h2 id="security-h">Runs inside your network</h2>
+    <p>Nullwake is a set of containers you run next to your warehouse, on one VM or your own container platform. Your rows never leave, and neither do your credentials.</p>
+  </div>
+  <div class="sec-body">
+    <svg class="boundary boundary-h" viewBox="0 0 680 270" role="img" aria-labelledby="bnd-t">
+      <title id="bnd-t">Inside your network, Nullwake queries your warehouse through a read-only role and receives only counts and aggregates. The only traffic that leaves is alerts to Slack or your webhook.</title>
+      <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" class="ah"/></marker></defs>
+      <rect class="net" x="2" y="22" width="476" height="246" rx="14"/>
+      <text class="net-l" x="20" y="14">Your network</text>
+      <rect class="box" x="26" y="88" width="160" height="104" rx="10"/>
+      <text class="bt" x="106" y="134" text-anchor="middle">Your warehouse</text>
+      <text class="bs" x="106" y="156" text-anchor="middle">Postgres, Snowflake</text>
+      <text class="bs" x="106" y="174" text-anchor="middle">or BigQuery</text>
+      <rect class="box nw" x="300" y="88" width="160" height="104" rx="10"/>
+      <text class="bt nwt" x="380" y="134" text-anchor="middle">Nullwake</text>
+      <text class="bs nws" x="380" y="156" text-anchor="middle">web, workers and</text>
+      <text class="bs nws" x="380" y="174" text-anchor="middle">its own Postgres</text>
+      <path class="ln" d="M298 122 H190" marker-end="url(#ah)"/>
+      <path class="ln" d="M190 158 H298" marker-end="url(#ah)"/>
+      <text class="al" x="244" y="112" text-anchor="middle">read-only</text>
+      <text class="al" x="244" y="180" text-anchor="middle">counts only</text>
+      <path class="ln out" d="M462 140 H560" marker-end="url(#ah)"/>
+      <rect class="box ext" x="562" y="104" width="114" height="72" rx="10"/>
+      <text class="bt" x="619" y="136" text-anchor="middle">Slack or</text>
+      <text class="bt" x="619" y="156" text-anchor="middle">your webhook</text>
+      <text class="al" x="520" y="128" text-anchor="middle">alerts</text>
+    </svg>
+    <svg class="boundary boundary-v" viewBox="0 0 340 430" role="img" aria-labelledby="bnd-t2">
+      <title id="bnd-t2">Inside your network, Nullwake queries your warehouse through a read-only role and receives only counts and aggregates. The only traffic that leaves is alerts to Slack or your webhook.</title>
+      <defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" class="ah"/></marker></defs>
+      <rect class="net" x="2" y="24" width="336" height="300" rx="14"/>
+      <text class="net-l" x="16" y="15">Your network</text>
+      <rect class="box" x="70" y="48" width="200" height="82" rx="10"/>
+      <text class="bt" x="170" y="82" text-anchor="middle">Your warehouse</text>
+      <text class="bs" x="170" y="104" text-anchor="middle">Postgres, Snowflake or BigQuery</text>
+      <path class="ln" d="M140 218 V134" marker-end="url(#ah2)"/>
+      <path class="ln" d="M200 134 V218" marker-end="url(#ah2)"/>
+      <text class="al" x="130" y="180" text-anchor="end">read-only</text>
+      <text class="al" x="210" y="180">counts only</text>
+      <rect class="box nw" x="50" y="222" width="240" height="82" rx="10"/>
+      <text class="bt nwt" x="170" y="256" text-anchor="middle">Nullwake</text>
+      <text class="bs nws" x="170" y="278" text-anchor="middle">web, workers and its own Postgres</text>
+      <path class="ln out" d="M170 306 V368" marker-end="url(#ah2)"/>
+      <text class="al" x="180" y="346">alerts</text>
+      <rect class="box ext" x="80" y="372" width="180" height="50" rx="10"/>
+      <text class="bt" x="170" y="402" text-anchor="middle">Slack or your webhook</text>
+    </svg>
+    <dl class="facts">
+      <div><dt>Read-only by construction</dt><dd>Checks run in read-only transactions with a statement timeout. Table and column names are validated, never pasted in from free text, and a custom rule must be a single <code>SELECT</code>.</dd></div>
+      <div><dt>No rows leave the warehouse</dt><dd>Built-in checks read back counts and aggregates only. Warehouse error messages are cut down to their error code before they are stored or logged.</dd></div>
+      <div><dt>Credentials stay in your environment</dt><dd>Contracts name an environment variable instead of holding a password, and a contract with an inline secret is rejected.</dd></div>
+      <div><dt>Nothing phones home</dt><dd>No telemetry and no licence server. The only outbound traffic is the alerts you configure and an optional heartbeat ping you point at your own monitor.</dd></div>
+      <div><dt>Every line is readable</dt><dd>Apache 2.0 source, an audit log of every sign-in and change, roles for viewers, editors and admins, and a web interface that ships no JavaScript.</dd></div>
+    </dl>
+  </div>
+</section>
+
+<section class="sec wrap" id="honest" aria-labelledby="honest-h">
+  <div class="sec-head">
+    <h2 id="honest-h">Built never to show a false green</h2>
+    <p>A monitor that says “passing” while the data is broken is worse than no monitor. Each of these came out of an external review and is covered by a regression test.</p>
+  </div>
+  <ul class="proof">
+    <li><h3>Empty answers are errors</h3><p>A rule that returns NULL or a non-number is reported as an error. It never counts as a pass and never closes an incident.</p></li>
+    <li><h3>Future timestamps fail freshness</h3><p>One bad row dated next week can’t hide a load that stopped yesterday.</p></li>
+    <li><h3>Late results are thrown away</h3><p>If a worker loses its claim on a check, its result is discarded, so an old “pass” can’t close a newer incident.</p></li>
+    <li><h3>Alerts survive crashes</h3><p>Alerts are written in the same transaction as the incident and retried until delivered.</p></li>
+    <li><h3>It watches itself</h3><p>A health endpoint for your uptime monitor turns red when checks are overdue, workers are silent or alerts are stuck.</p></li>
+    <li><h3>History is never deleted</h3><p>Removing a check retires it. Its runs, incidents and audit trail stay, and re-adding it brings them back.</p></li>
+  </ul>
+</section>
+
+<section class="pilot" id="pilot" aria-labelledby="pilot-h">
+  <div class="wrap pilot-in">
+    <div class="pilot-main">
+      <h2 id="pilot-h">Start with a 30-day pilot</h2>
+      <p class="pilot-lede">Free for design partners. I set it up with your team, inside your network, and we find out together whether it catches problems that matter to you.</p>
+      <ul class="incl">
+        <li>Deployment on one VM or your container platform, together on a call</li>
+        <li>Contracts for your 5 to 10 most important tables, written with you</li>
+        <li>Alerts routed to your Slack channel or incident tool</li>
+        <li>A short weekly review of what fired and what it missed</li>
+      </ul>
+      <p class="after">After the pilot, a yearly subscription per deployment covers setup help, support and priority fixes. You get a quote before the pilot ends, with no obligation to continue. The software itself stays open source under Apache 2.0.</p>
+      <p class="ctas"><a class="btn btn-primary" href="mailto:hello@nullwake.si?subject=Nullwake%20pilot">Email hello@nullwake.si</a></p>
+    </div>
+    <div class="pilot-need">
+      <h3>What you need</h3>
+      <ul>
+        <li>Postgres 14 or later, Snowflake, or BigQuery</li>
+        <li>A small Linux VM or a container platform inside your network</li>
+        <li>A read-only warehouse role (we create it together)</li>
+        <li>Slack or any HTTPS webhook endpoint</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="sec wrap" id="about" aria-labelledby="about-h">
+  <div class="sec-head">
+    <h2 id="about-h">Who builds it</h2>
+    <p>Nullwake is built by Akhil Pettem, a data engineer in Bengaluru, India. It is an early, independent product: you talk directly to the person who writes the code, and your feedback shapes what gets built next.</p>
+    <p class="links"><a href="https://www.linkedin.com/in/akhil-p-8bbab842a/">LinkedIn</a> <a href="https://github.com/akhilp-prog/nullwake">Source on GitHub</a> <a href="mailto:hello@nullwake.si">hello@nullwake.si</a></p>
+  </div>
+  <div class="status">
+    <h3>Where it stands, November 2026</h3>
+    <dl>
+      <div><dt>Version</dt><dd>0.6.2, running in production at app.nullwake.si</dd></div>
+      <div><dt>Postgres</dt><dd>Tested end to end against real databases</dd></div>
+      <div><dt>Snowflake</dt><dd>Verified against a live account: all six check types pass on healthy data and planted defects are caught</dd></div>
+      <div><dt>BigQuery</dt><dd>Beta: query generation is tested, a live-project run is next</dd></div>
+      <div><dt>Next</dt><dd>Single sign-on (OIDC), PagerDuty and Opsgenie alerts, contracts generated from dbt, a Helm chart</dd></div>
+    </dl>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <p class="foot-brand"><span class="logo"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="4"/><circle cx="16" cy="16" r="3.4" fill="currentColor"/></svg>nullwake</span> Data contracts that run inside your network.</p>
+    <p class="foot-links"><a href="mailto:hello@nullwake.si">hello@nullwake.si</a> <a href="https://app.nullwake.si/">Live demo</a> <a href="https://github.com/akhilp-prog/nullwake">GitHub</a></p>
+    <p class="privacy">This site sets no cookies, runs no JavaScript and loads nothing from other domains. Visits are logged with shortened IP addresses and deleted after 30 days.</p>
+  </div>
+</footer>
+</body>
+</html>

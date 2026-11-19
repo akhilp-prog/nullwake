@@ -3,7 +3,7 @@
 # Public demo with a simulated warehouse: docker compose --profile demo up -d --build
 x-app: &app
   build: .
-  image: nullwake:${NULLWAKE_VERSION:-0.6.1}
+  image: nullwake:${NULLWAKE_VERSION:-0.6.2}
   env_file: .env
   environment:
     NULLWAKE_DATABASE_URL: postgresql+psycopg://nullwake:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db/nullwake
@@ -67,9 +67,12 @@ services:
     environment:
       NULLWAKE_DOMAIN: ${NULLWAKE_DOMAIN}
       NULLWAKE_REDIRECT_FROM: ${NULLWAKE_REDIRECT_FROM:-http://redirect.invalid}
+      NULLWAKE_SITE_DOMAIN: ${NULLWAKE_SITE_DOMAIN:-http://site.invalid}
+      NULLWAKE_SITE_REDIRECT_FROM: ${NULLWAKE_SITE_REDIRECT_FROM:-http://site-redirect.invalid}
     ports: ["80:80", "443:443"]
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./site:/srv/site:ro
       - caddy_data:/data
       - caddy_config:/config
       - access_logs:/var/log/nullwake

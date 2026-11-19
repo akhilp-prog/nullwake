@@ -23,6 +23,7 @@ SKIP_PREFIXES = ("/static/", "/api/", "/watchdog", "/healthz", "/readyz", "/metr
 BOT = re.compile(r"bot|crawl|spider|slurp|monitor|uptime|stackdriver|curl|wget|python|go-http|httpx|java/|"
                  r"preview|facebookexternalhit|whatsapp|headless|lighthouse|scanner", re.I)
 NUMERIC = re.compile(r"/\d+(?=/|$)")
+ASSET = re.compile(r"\.(css|js|woff2?|png|jpe?g|webp|svg|ico|txt|xml|map)$", re.I)  # files, not pages (marketing site)
 
 
 @dataclass
@@ -99,22 +100,27 @@ def compute(path: str, own_host: str, days: int = 30, now: datetime | None = Non
         if ts < since:
             continue
         method, uri, status = req.get("method", ""), (req.get("uri") or "/").split("?")[0], int(entry.get("status", 0))
+        # The same log may hold other hostnames served by the proxy (e.g. the marketing site at the apex domain).
+        # Their pages are listed with the host in front so "/" on the site and "/" in the app stay apart.
+        host = str(req.get("host") or "").lower().rsplit(":", 1)[0] if req.get("host") else ""
+        other_host = bool(host and own_host and host != own_host.lower())
         headers = req.get("headers") or {}
         agent = _header(headers, "User-Agent")
         if not agent or BOT.search(agent):
             stats.bots_ignored += 1
             continue
-        if method == "POST" and uri == "/login" and status == 303:
+        if not other_host and method == "POST" and uri == "/login" and status == 303:
             stats.demo_sign_ins += 1
             continue
-        if method != "GET" or status >= 400 or uri.startswith(SKIP_PREFIXES):
+        if method != "GET" or status >= 400 or uri.startswith(SKIP_PREFIXES) or ASSET.search(uri):
             continue
         day = ts.strftime("%Y-%m-%d")
         who = hashlib.sha256(f"{req.get('client_ip') or req.get('remote_ip')}|{agent}".encode()).hexdigest()[:16]
         per_day_visitors[day].add(who)
         all_visitors.add(who)
         per_day_views[day] += 1
-        pages[NUMERIC.sub("/:id", uri) or "/"] += 1
+        page = NUMERIC.sub("/:id", uri) or "/"
+        pages[f"{host}{page}" if other_host else page] += 1
         ref = _referrer(_header(headers, "Referer"), own_host)
         if ref:
             refs[ref] += 1

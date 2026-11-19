@@ -107,6 +107,22 @@ The numbers come from Caddy's access log, written to the `access_logs` volume an
 
 Set `NULLWAKE_ACCESS_LOG` if the log lives somewhere other than `/var/log/nullwake/access.log`.
 
+If the proxy also serves the product website (below), its pages appear with the hostname in front, for example
+`nullwake.si/`, and a visit from the site to the app shows the site as the referrer.
+
+## Product website
+
+`site/` holds a static website (HTML, CSS, self-hosted fonts and images; no JavaScript). To serve it from the bundled
+Caddy, point its DNS name at the host and set, in `.env`:
+
+```sh
+NULLWAKE_SITE_DOMAIN=example.com
+NULLWAKE_SITE_REDIRECT_FROM=www.example.com   # optional; 301 to NULLWAKE_SITE_DOMAIN
+```
+
+Do not also list those names in `NULLWAKE_REDIRECT_FROM`. Then `docker compose up -d proxy`. Edits to files in `site/`
+are live immediately (the folder is mounted read-only); HTML and CSS are cached for 10 minutes, fonts and images for 30 days.
+
 ## Common tasks
 
 | Task | Command |

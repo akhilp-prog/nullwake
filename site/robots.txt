@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://nullwake.si/sitemap.xml

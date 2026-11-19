@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.2 (2026-11-19)
+
+- Product website in `site/`: a static page with no JavaScript, cookies or third-party requests, served by the bundled
+  Caddy at `NULLWAKE_SITE_DOMAIN` under a strict Content-Security-Policy, with `NULLWAKE_SITE_REDIRECT_FROM` for
+  `www`. The Caddy access-log filter is now a shared snippet, so the site is logged with the same privacy filtering.
+- Visitors page: pages from other hostnames in the access log (the website) are listed with their host, site assets
+  are not counted as page views, and only the app's own sign-ins count as demo sign-ins.
+
 ## 0.6.1 (2026-11-19)
 
 Fixes from a second external review (of 0.6.0), each with a regression test.

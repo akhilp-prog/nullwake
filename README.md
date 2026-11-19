@@ -153,13 +153,13 @@ export NULLWAKE_TEST_WAREHOUSE_DSN="host=localhost dbname=warehouse user=postgre
 pytest
 ```
 
-The suite (51 tests) runs against real Postgres: checks against live tables, read-only and timeout enforcement,
+The suite (91 tests) runs against real Postgres: checks against live tables, read-only and timeout enforcement,
 incident lifecycle, `SKIP LOCKED` claiming under contention, signed webhook delivery and retry, RBAC, CSRF/origin
 checks, throttling, and the CLI's CI exit codes.
 
 ## Status
 
-Version 0.5, running in production at app.nullwake.si. Postgres is fully tested end to end. Snowflake is verified
+Version 0.6, running in production at app.nullwake.si (product site: [nullwake.si](https://nullwake.si)). Postgres is fully tested end to end. Snowflake is verified
 against a live Snowflake account (November 2026): all six check types pass on healthy data, and a planted duplicate
 order and negative amount are both caught, using a key-pair service user and a read-only role. Snowflake checks also
 run end to end in CI against the [fakesnow](https://github.com/tekumara/fakesnow) emulator. BigQuery SQL generation is

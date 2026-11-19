@@ -1,5 +1,4 @@
-{$NULLWAKE_DOMAIN} {
-	encode zstd gzip
+(access_log) {
 	# Visit log for the admin "Visitors" page: client IPs masked to /24 (IPv4) and /48 (IPv6), no cookies,
 	# tokens or query strings. Kept 30 days, readable by the web container (mounted read-only there).
 	log {
@@ -24,6 +23,11 @@
 			request>headers>X-Real-Ip delete
 		}
 	}
+}
+
+{$NULLWAKE_DOMAIN} {
+	encode zstd gzip
+	import access_log
 	# Metrics and readiness are for the internal network / your Prometheus only.
 	@internal path /metrics /readyz
 	respond @internal 404
@@ -36,4 +40,39 @@
 # Set NULLWAKE_REDIRECT_FROM="example.com, www.example.com" in .env
 {$NULLWAKE_REDIRECT_FROM} {
 	redir https://{$NULLWAKE_DOMAIN}{uri} permanent
+}
+
+# Optional static marketing site (files in ./site), e.g. NULLWAKE_SITE_DOMAIN=example.com, and hostnames that
+# redirect to it, e.g. NULLWAKE_SITE_REDIRECT_FROM=www.example.com. No JavaScript, cookies or third-party requests.
+{$NULLWAKE_SITE_DOMAIN} {
+	import access_log
+	encode zstd gzip
+	root * /srv/site
+	header {
+		Content-Security-Policy "default-src 'none'; style-src 'self'; font-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+	@assets path /fonts/* /img/*
+	header @assets Cache-Control "public, max-age=2592000"
+	@pages not path /fonts/* /img/*
+	header @pages Cache-Control "public, max-age=600"
+	file_server
+	handle_errors {
+		@missing expression {err.status_code} == 404
+		handle @missing {
+			rewrite * /404.html
+			file_server {
+				status 404
+			}
+		}
+		respond "{err.status_code} {err.status_text}"
+	}
+}
+
+{$NULLWAKE_SITE_REDIRECT_FROM} {
+	redir https://{$NULLWAKE_SITE_DOMAIN}{uri} permanent
 }
