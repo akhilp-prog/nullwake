@@ -148,8 +148,10 @@ class SnowflakeDialect(Dialect):
     aliases = {
         "int": "number", "integer": "number", "bigint": "number", "smallint": "number", "decimal": "number",
         "numeric": "number", "string": "text", "varchar": "text", "char": "text", "character": "text",
-        "timestamp": "timestamp_ntz", "datetime": "timestamp_ntz", "double": "float", "real": "float",
-        "float8": "float", "bool": "boolean",
+        "timestamp": "timestamp_ntz", "datetime": "timestamp_ntz", "timestamp without time zone": "timestamp_ntz",
+        "timestamp with time zone": "timestamp_tz", "timestamptz": "timestamp_tz", "double": "float",
+        "double precision": "float", "real": "float", "float4": "float", "float8": "float", "bool": "boolean",
+        "varbinary": "binary",
     }
 
     def age_seconds(self, column: str) -> str:
@@ -242,7 +244,10 @@ class PostgresConnector(Connector):
         self.conn.close()
 
 
-class SnowflakeConnector(Connector):  # pragma: no cover - requires a Snowflake account
+class SnowflakeConnector(Connector):
+    """Snowflake via snowflake-connector-python. Sessions run in UTC (Snowflake's default is America/Los_Angeles,
+    which would shift every freshness age on TIMESTAMP_NTZ columns by the UTC offset), carry a server-side statement
+    timeout and a query tag, and use a dedicated read-only role (docs/security.md)."""
     dialect = DIALECTS["snowflake"]
 
     def __init__(self, name: str, spec: dict, timeout_seconds: int):
@@ -251,37 +256,52 @@ class SnowflakeConnector(Connector):  # pragma: no cover - requires a Snowflake 
             import snowflake.connector
         except ImportError:
             raise ConnectorError("install nullwake[snowflake] to use Snowflake connections") from None
-        params: dict[str, Any] = {k: spec[k] for k in ("account", "user", "warehouse", "database", "role") if spec.get(k)}
-        params["session_parameters"] = {"STATEMENT_TIMEOUT_IN_SECONDS": self.timeout, "QUERY_TAG": "nullwake"}
+        for key in ("account", "user"):
+            if not spec.get(key):
+                raise ConnectorError(f"connection spec is missing {key}")
+        params: dict[str, Any] = {k: spec[k] for k in ("account", "user", "warehouse", "database", "schema", "role")
+                                  if spec.get(k)}
+        params.update(
+            application="nullwake", login_timeout=30, network_timeout=self.timeout + 30,
+            session_parameters={"STATEMENT_TIMEOUT_IN_SECONDS": self.timeout, "QUERY_TAG": "nullwake",
+                                "TIMEZONE": "UTC"})
         if spec.get("privateKeyFileEnv"):
             params["private_key_file"] = _env(spec, "privateKeyFileEnv")
+            passphrase = _env(spec, "privateKeyPassphraseEnv", required=False)
+            if passphrase:
+                params["private_key_file_pwd"] = passphrase
         else:
             params["password"] = _env(spec, "passwordEnv")
         try:
             self.conn = snowflake.connector.connect(**params)
         except Exception as exc:
+            log.warning("cannot connect to Snowflake connection %s: %s", name, str(exc).strip()[:2000])
             raise ConnectorError(f"cannot connect to {name}: {exc.__class__.__name__}") from None
 
-    def row(self, sql: str) -> tuple:
+    def _run(self, sql: str, params: tuple | None = None) -> list[tuple]:
         try:
             with self.conn.cursor() as cur:
-                cur.execute(sql)
-                rows = cur.fetchall()
+                cur.execute(sql, params)
+                return [tuple(r) for r in cur.fetchall()]
         except Exception as exc:
             raise redacted(self.name, exc) from None
+
+    def row(self, sql: str) -> tuple:
+        rows = self._run(sql)
         if len(rows) != 1:
             raise ConnectorError(f"expected one row, got {len(rows)}")
-        return tuple(rows[0])
+        return rows[0]
 
     def columns(self, dataset: str) -> list[ColumnInfo]:
         parts = split_dataset(dataset)
-        db, schema, table = ([self.spec.get("database", "")] * (3 - len(parts)) + parts)[-3:]
+        default_schema = self.spec.get("schema") or "PUBLIC"
+        db, schema, table = ([self.spec.get("database", ""), default_schema][:3 - len(parts)] + parts)[-3:] \
+            if len(parts) < 3 else parts
         prefix = f"{ident(db)}." if db else ""
-        with self.conn.cursor() as cur:
-            cur.execute(f"SELECT column_name, data_type, is_nullable = 'YES' FROM {prefix}information_schema.columns "
-                        "WHERE table_schema = UPPER(%s) AND table_name = UPPER(%s) ORDER BY ordinal_position",
-                        (schema, table))
-            return [ColumnInfo(r[0].lower(), self.dialect.normalize_type(r[1]), bool(r[2])) for r in cur.fetchall()]
+        rows = self._run(f"SELECT column_name, data_type, is_nullable = 'YES' FROM {prefix}information_schema.columns "
+                         "WHERE table_schema = UPPER(%s) AND table_name = UPPER(%s) ORDER BY ordinal_position",
+                         (ident(schema), ident(table)))
+        return [ColumnInfo(r[0].lower(), self.dialect.normalize_type(r[1]), bool(r[2])) for r in rows]
 
     def close(self) -> None:
         self.conn.close()

@@ -69,12 +69,16 @@ GRANT USAGE ON DATABASE ANALYTICS TO ROLE NULLWAKE_READER;
 GRANT USAGE ON ALL SCHEMAS IN DATABASE ANALYTICS TO ROLE NULLWAKE_READER;
 GRANT SELECT ON ALL TABLES IN DATABASE ANALYTICS TO ROLE NULLWAKE_READER;
 GRANT SELECT ON FUTURE TABLES IN DATABASE ANALYTICS TO ROLE NULLWAKE_READER;
-CREATE USER NULLWAKE_SVC DEFAULT_ROLE = NULLWAKE_READER RSA_PUBLIC_KEY = '…';
+CREATE USER NULLWAKE_SVC TYPE = SERVICE DEFAULT_ROLE = NULLWAKE_READER RSA_PUBLIC_KEY = '…';
 GRANT ROLE NULLWAKE_READER TO USER NULLWAKE_SVC;
 ```
 
 Use a dedicated extra-small warehouse with auto-suspend so monitoring cost is visible and bounded. Sessions set
-`STATEMENT_TIMEOUT_IN_SECONDS` and `QUERY_TAG = 'nullwake'`.
+`STATEMENT_TIMEOUT_IN_SECONDS`, `QUERY_TAG = 'nullwake'` and `TIMEZONE = 'UTC'`, and connect with a 30-second login
+timeout. `TIMESTAMP_NTZ` columns are therefore read as UTC; Snowflake's own default (America/Los_Angeles) would shift
+every freshness age by the UTC offset. If a table stores local wall-clock time in `TIMESTAMP_NTZ`, use a
+`TIMESTAMP_TZ` column or an assertion instead. Snowflake has no read-only session mode, so the role above is the
+boundary: never point Nullwake at a role that owns or can write to the tables.
 
 **BigQuery**: a service account with `roles/bigquery.dataViewer` on the datasets and `roles/bigquery.jobUser` on the
 project. Every job carries `maximum_bytes_billed` (default 10 GiB; `maximumBytesBilled` in the connection spec) and

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0 (2026-11-19)
+
+- Snowflake connector hardened for pilots: sessions now run in UTC (Snowflake defaults to America/Los_Angeles, which
+  shifted freshness ages on `TIMESTAMP_NTZ` columns by the UTC offset), connect with login and network timeouts,
+  support encrypted private keys (`privateKeyPassphraseEnv`) and a default `schema`, and redact errors from schema
+  lookups as well as checks.
+- Fixed: a bare table name on Snowflake looked up columns with the database name as the schema.
+- Snowflake checks now run end to end in the test suite against the fakesnow emulator.
+
 ## 0.4.0 (2026-11-19)
 
 - Visitor statistics for admins at `/visitors`: visitors, page views, demo sign-ins, referrers and top pages over 7 or 30 days, read from Caddy's access log. No cookies, no JavaScript, no third-party analytics.

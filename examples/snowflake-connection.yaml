@@ -9,4 +9,6 @@ spec:
   role: NULLWAKE_READER
   warehouse: MONITORING_XS
   database: ANALYTICS
+  schema: SALES                                   # used for bare table names such as `orders`
   privateKeyFileEnv: SNOWFLAKE_PRIVATE_KEY_FILE   # path to a PKCS#8 key mounted as a secret
+  privateKeyPassphraseEnv: SNOWFLAKE_KEY_PASSPHRASE  # only if the key is encrypted
