@@ -157,10 +157,11 @@ checks, throttling, and the CLI's CI exit codes.
 
 ## Status
 
-Version 0.5, running in production at app.nullwake.si. Postgres is fully tested end to end. Snowflake checks
-(freshness, volume, nulls, duplicates, schema, assertions) run end to end in CI against the
-[fakesnow](https://github.com/tekumara/fakesnow) emulator; BigQuery SQL generation is unit-tested. Neither has yet
-been run against a live customer account, which is what a pilot is for. Planned next: OIDC single sign-on, PagerDuty/Opsgenie channels, dbt `manifest.json` import to generate
+Version 0.5, running in production at app.nullwake.si. Postgres is fully tested end to end. Snowflake is verified
+against a live Snowflake account (November 2026): all six check types pass on healthy data, and a planted duplicate
+order and negative amount are both caught, using a key-pair service user and a read-only role. Snowflake checks also
+run end to end in CI against the [fakesnow](https://github.com/tekumara/fakesnow) emulator. BigQuery SQL generation is
+unit-tested but not yet run against a live project. Planned next: OIDC single sign-on, PagerDuty/Opsgenie channels, dbt `manifest.json` import to generate
 contracts, a Helm chart, and per-team routing.
 
 Built by [Akhil Pettem](https://www.linkedin.com/in/akhil-p-8bbab842a/).

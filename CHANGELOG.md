@@ -7,7 +7,8 @@
   support encrypted private keys (`privateKeyPassphraseEnv`) and a default `schema`, and redact errors from schema
   lookups as well as checks.
 - Fixed: a bare table name on Snowflake looked up columns with the database name as the schema.
-- Snowflake checks now run end to end in the test suite against the fakesnow emulator.
+- Snowflake checks now run end to end in the test suite against the fakesnow emulator, and were verified against a
+  live Snowflake account: 6/6 pass on healthy data; a planted duplicate and a negative amount both fail as expected.
 
 ## 0.4.0 (2026-11-19)
 
