@@ -3,7 +3,7 @@ FROM python:3.12-slim AS build
 WORKDIR /src
 COPY pyproject.toml README.md ./
 COPY src ./src
-RUN pip wheel --no-cache-dir --wheel-dir /wheels .
+RUN pip wheel --no-cache-dir --wheel-dir /wheels ".[snowflake,bigquery]"
 
 FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1

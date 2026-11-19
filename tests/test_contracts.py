@@ -82,7 +82,7 @@ def test_dialect_sql_generation():
     pg, sf, bq = DIALECTS["postgres"], DIALECTS["snowflake"], DIALECTS["bigquery"]
     assert "EXTRACT(EPOCH FROM (now() - MAX(loaded_at)))" in pg.freshness_sql("a.b", "loaded_at")
     assert "DATEDIFF('second', MAX(loaded_at), CURRENT_TIMESTAMP())" in sf.freshness_sql("db.a.b", "loaded_at")
-    assert bq.freshness_sql("p.d.t", "ts").endswith("FROM `p.d.t`")
+    assert bq.freshness_sql("my-proj.d.t", "ts").endswith("FROM `my-proj.d.t`")
     sql = pg.volume_sql("a.b", "ts", 24, 3)
     assert sql.count("SUM(CASE") == 4 and "interval '345600 seconds'" in sql
     assert "TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 86400 SECOND)" in bq.volume_sql("d.t", "ts", 24, 3)

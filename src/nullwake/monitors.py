@@ -1,6 +1,8 @@
 """Check evaluation. Each check returns a Result; no warehouse rows are retained, only aggregates."""
 from __future__ import annotations
 
+import math
+
 import statistics
 from dataclasses import dataclass, field
 from typing import Any
@@ -36,6 +38,11 @@ def check_freshness(conn: Connector, dataset: str, params: dict, state: dict) ->
     limit = float(params["maxAgeMinutes"])
     if not count or age is None:
         return Result("fail", f"{dataset} has no rows with {params['column']} set", None, {"rows": count or 0})
+    skew = float(params.get("maxFutureSkewMinutes", 5))
+    if _num(age) < -skew * 60:
+        ahead = -_num(age) / 60
+        return Result("fail", f"Newest {params['column']} is {human_minutes(ahead)} in the future; a bad timestamp "
+                      "can hide a stopped load", None, {"futureMinutes": round(ahead, 2), "rows": count})
     minutes = max(_num(age), 0.0) / 60
     observed = {"ageMinutes": round(minutes, 2), "maxAgeMinutes": limit}
     if minutes > limit:
@@ -132,10 +139,15 @@ def check_assertion(conn: Connector, dataset: str, params: dict, state: dict) ->
     row = conn.row(params["sql"])
     if len(row) != 1:
         raise ConnectorError("assertion SQL must return exactly one column")
+    if row[0] is None:
+        return Result("error", "Assertion returned NULL, so the rule could not be evaluated "
+                      "(wrap aggregates in COALESCE if an empty input should count as 0)", None, {"value": None})
     try:
-        value = float(row[0] or 0)
+        value = float(row[0])
     except (TypeError, ValueError):
         raise ConnectorError("assertion SQL must return a number") from None
+    if not math.isfinite(value):
+        return Result("error", "Assertion returned a non-finite number", None, {"value": str(value)})
     limit = float(params.get("maxValue", 0))
     observed = {"value": value, "maxValue": limit}
     if value > limit:

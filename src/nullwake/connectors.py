@@ -34,6 +34,14 @@ def redacted(name: str, exc: BaseException) -> "ConnectorError":
     return ConnectorError(f"{name}: query failed: {reason}" + (f" (SQLSTATE {code})" if code else ""))
 
 IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]{0,127}$")
+BQ_PROJECT = re.compile(r"^(?:[a-z][a-z0-9.-]{0,61}:)?[a-z][a-z0-9-]{4,28}[a-z0-9]$")
+
+
+def bq_project(value: str) -> str:
+    """Google Cloud project IDs contain hyphens (e.g. acme-analytics), which plain identifiers do not allow."""
+    if not isinstance(value, str) or not BQ_PROJECT.match(value):
+        raise ConnectorError(f"invalid BigQuery project {value!r}")
+    return value
 CONNECTION_TYPES = ("postgres", "snowflake", "bigquery")
 
 
@@ -113,7 +121,7 @@ class Dialect:
         col, w = self.column(column), int(window_hours) * 3600
         buckets = []
         for i in range(lookback_windows + 1):
-            upper = "" if i == 0 else f" AND {col} < {self.ago(w * i)}"
+            upper = f" AND {col} <= {self.ago(0)}" if i == 0 else f" AND {col} < {self.ago(w * i)}"
             buckets.append(f"SUM(CASE WHEN {col} >= {self.ago(w * (i + 1))}{upper} THEN 1 ELSE 0 END)")
         return f"SELECT {', '.join(buckets)} FROM {self.table(dataset)} WHERE {col} >= {self.ago(w * (lookback_windows + 1))}"
 
@@ -167,7 +175,10 @@ class BigQueryDialect(Dialect):
                "numeric": "numeric", "decimal": "numeric", "text": "string", "varchar": "string"}
 
     def table(self, dataset: str) -> str:
-        return "`" + ".".join(split_dataset(dataset)) + "`"
+        parts = dataset.split(".")
+        if len(parts) == 3:
+            return "`" + ".".join([bq_project(parts[0])] + split_dataset(".".join(parts[1:]), 2)) + "`"
+        return "`" + ".".join(split_dataset(dataset, 2)) + "`"
 
     def age_seconds(self, column: str) -> str:
         return f"TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), {column}, SECOND)"
@@ -340,9 +351,15 @@ class BigQueryConnector(Connector):  # pragma: no cover - requires a GCP project
         return tuple(rows[0].values())
 
     def columns(self, dataset: str) -> list[ColumnInfo]:
-        parts = split_dataset(dataset)
-        project, ds, table = ([self.spec.get("project", "")] * (3 - len(parts)) + parts)[-3:]
-        sql = (f"SELECT column_name, data_type, is_nullable = 'YES' FROM `{ident(project)}.{ds}.INFORMATION_SCHEMA.COLUMNS` "
+        raw = dataset.split(".")
+        if len(raw) == 3:
+            project, (ds, table) = bq_project(raw[0]), split_dataset(".".join(raw[1:]), 2)
+        else:
+            parts = split_dataset(dataset, 2)
+            if len(parts) != 2:
+                raise ConnectorError(f"BigQuery dataset must be dataset.table or project.dataset.table, got {dataset!r}")
+            project, (ds, table) = bq_project(self.spec.get("project", "")), parts
+        sql = (f"SELECT column_name, data_type, is_nullable = 'YES' FROM `{project}.{ds}.INFORMATION_SCHEMA.COLUMNS` "
                f"WHERE table_name = @t ORDER BY ordinal_position")
         config = self.bq.QueryJobConfig(query_parameters=[self.bq.ScalarQueryParameter("t", "STRING", table)])
         rows = self.client.query(sql, job_config=config).result(timeout=self.timeout)
