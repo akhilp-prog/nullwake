@@ -44,3 +44,19 @@ def test_bigquery_project_ids_with_hyphens():
     for bad in ("acme`; drop", "x", "-acme-analytics"):
         with pytest.raises(ConnectorError):
             bq.table(f"{bad}.sales.orders")
+
+
+def test_raw_warehouse_error_text_stays_out_of_logs(caplog, monkeypatch):
+    from nullwake.connectors import redacted
+
+    class Boom(Exception):
+        sqlstate = "22P02"
+    monkeypatch.delenv("NULLWAKE_LOG_WAREHOUSE_ERRORS", raising=False)
+    with caplog.at_level("WARNING"):
+        err = redacted("wh", Boom('invalid input syntax for type integer: "4111-1111-1111-1111"'))
+    assert "4111" not in caplog.text and "4111" not in str(err) and "22P02" in caplog.text
+    monkeypatch.setenv("NULLWAKE_LOG_WAREHOUSE_ERRORS", "1")
+    caplog.clear()
+    with caplog.at_level("WARNING"):
+        redacted("wh", Boom("debug text 4111"))
+    assert "4111" in caplog.text  # opt-in for debugging only

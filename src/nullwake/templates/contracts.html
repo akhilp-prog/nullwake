@@ -12,7 +12,7 @@
     <td><a href="/contracts/{{ c.name }}"><b>{{ c.name }}</b></a></td>
     <td><code>{{ c.dataset }}</code><small class="block">{{ c.connection_name }}</small></td>
     <td>{{ c.owner or '—' }}</td>
-    <td>{% for mon in c.monitors %}<a href="/checks/{{ mon.id }}" class="dot s-{{ mon.last_status or 'pending' }}" title="{{ mon.name }}: {{ mon.last_status or 'pending' }}"></a>{% endfor %}</td>
+    <td>{% for mon in c.active_monitors %}<a href="/checks/{{ mon.id }}" class="dot s-{{ mon.last_status or 'pending' }}" title="{{ mon.name }}: {{ mon.last_status or 'pending' }}"></a>{% endfor %}</td>
     <td>v{{ c.version }}</td><td class="nowrap">{{ c.updated_at|ago }}</td>
   </tr>
   {% else %}<tr><td colspan="6" class="calm">No contracts applied yet.</td></tr>{% endfor %}

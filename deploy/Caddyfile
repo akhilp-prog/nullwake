@@ -18,6 +18,10 @@
 			request>headers>X-Nullwake-Client delete
 			resp_headers>Set-Cookie delete
 			request>uri regexp "[?].*$" ""
+			request>headers>Referer regexp "[?#].*$" ""
+			request>headers>X-Forwarded-For delete
+			request>headers>Forwarded delete
+			request>headers>X-Real-Ip delete
 		}
 	}
 	# Metrics and readiness are for the internal network / your Prometheus only.

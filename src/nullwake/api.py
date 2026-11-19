@@ -46,9 +46,9 @@ def status(db: Session = Depends(get_db), _: Principal = Depends(require("viewer
 
 @router.get("/contracts")
 def contracts(db: Session = Depends(get_db), _: Principal = Depends(require("viewer"))):
-    rows = db.scalars(select(Contract).order_by(Contract.name)).all()
+    rows = db.scalars(select(Contract).where(Contract.retired_at.is_(None)).order_by(Contract.name)).all()
     return [{"name": c.name, "owner": c.owner, "dataset": c.dataset, "connection": c.connection_name,
-             "version": c.version, "updatedAt": c.updated_at, "checks": [_check(m) for m in c.monitors]} for c in rows]
+             "version": c.version, "updatedAt": c.updated_at, "checks": [_check(m) for m in c.active_monitors]} for c in rows]
 
 
 @router.get("/contracts/{name}")
@@ -58,12 +58,12 @@ def contract(name: str, db: Session = Depends(get_db), _: Principal = Depends(re
         raise HTTPException(404, "contract not found")
     return {"name": c.name, "owner": c.owner, "description": c.description, "dataset": c.dataset,
             "connection": c.connection_name, "version": c.version, "checksum": c.checksum,
-            "yaml": c.source_yaml, "checks": [_check(m) for m in c.monitors]}
+            "yaml": c.source_yaml, "checks": [_check(m) for m in c.active_monitors]}
 
 
 @router.get("/checks")
 def checks(status: str | None = None, db: Session = Depends(get_db), _: Principal = Depends(require("viewer"))):
-    stmt = select(Monitor).order_by(Monitor.name)
+    stmt = select(Monitor).where(Monitor.retired_at.is_(None)).order_by(Monitor.name)
     if status:
         stmt = stmt.where(func.coalesce(Monitor.last_status, "pending") == status)
     return [_check(m) for m in db.scalars(stmt)]

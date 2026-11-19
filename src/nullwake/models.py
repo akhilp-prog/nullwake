@@ -77,7 +77,12 @@ class Contract(Base):
     version: Mapped[int] = mapped_column(Integer, default=1)
     spec: Mapped[dict] = mapped_column(JSONB, default=dict)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     monitors: Mapped[list["Monitor"]] = relationship(back_populates="contract", order_by="Monitor.name")
+
+    @property
+    def active_monitors(self) -> list["Monitor"]:
+        return [m for m in self.monitors if m.retired_at is None]
 
 
 class Monitor(Base):
@@ -104,6 +109,8 @@ class Monitor(Base):
     lease_token: Mapped[str | None] = mapped_column(String(36))
     # Bumped by "Run now". A run that finishes with a higher count than it was claimed with is rerun at once.
     run_requests: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Set when the check is removed from its contract. Retired checks keep their runs, incidents and queued alerts.
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     contract: Mapped[Contract | None] = relationship(back_populates="monitors")
 
     __table_args__ = (Index("ix_monitors_due", "enabled", "next_run_at"),)

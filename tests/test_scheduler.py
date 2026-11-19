@@ -4,6 +4,7 @@ These cover the failure modes from the reviews of v0.1 and v0.2: a worker that d
 interval, a late result from a worker that lost its claim (it must not resolve a newer incident), a check whose
 definition changes mid-run, "Run now" during a run, and monitoring that stops without anyone being told.
 """
+import os
 from datetime import timedelta
 
 import httpx
@@ -17,6 +18,9 @@ from nullwake.monitors import Result
 from nullwake.watchdog import connections_not_executing, monitoring_status, overdue_checks, stalled_deliveries
 from nullwake.worker import claim_due, execute, heartbeat, ping_deadman, renew_lease
 
+from nullwake.contracts import load_bundle
+
+from .conftest import CONNECTION_YAML
 from .test_engine import bundle, setup_monitor
 
 LEASE = 300
@@ -97,6 +101,20 @@ def test_result_of_a_changed_check_definition_is_discarded(db, tmp_path, wh):
     db.commit()  # the definition changed while worker-a was running the old one
     assert execute(mon.id, get_settings(), claim=c) == "stale"
     assert db.scalar(select(func.count()).select_from(CheckRun)) == 0
+
+
+def test_result_from_before_a_same_name_connection_change_is_discarded(db, tmp_path, wh, monkeypatch):
+    table(wh, fresh=True)
+    mon = setup_monitor(db, tmp_path)
+    (c,) = claim("worker-a")
+    monkeypatch.setenv("NEW_WAREHOUSE_DSN", os.environ["TEST_WAREHOUSE_DSN"])
+    moved = tmp_path / "moved.yaml"
+    moved.write_text(CONNECTION_YAML.replace("TEST_WAREHOUSE_DSN", "NEW_WAREHOUSE_DSN"))
+    engine.apply_bundle(db, load_bundle([moved]), "editor")  # connection "wh" now points somewhere else
+    db.commit()
+    assert execute(mon.id, get_settings(), claim=c) == "stale"
+    assert db.scalar(select(func.count()).select_from(CheckRun)) == 0
+    assert len(claim("worker-b")) == 1  # rerun right away against the new settings
 
 
 def test_renewal_needs_the_same_claim_and_a_live_lease(db, tmp_path):

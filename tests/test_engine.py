@@ -205,3 +205,49 @@ def test_failed_delivery_backs_off_then_gives_up(db, tmp_path, monkeypatch):
             db.commit()
     assert {d.status for d in db.scalars(select(AlertDelivery))} == {"failed"}
     assert db.scalar(select(IncidentEvent).where(IncidentEvent.kind == "alert_failed")) is not None
+
+
+def test_removing_a_check_keeps_its_history_and_alerts(db, tmp_path, monkeypatch):
+    monkeypatch.setenv("TEST_HOOK_URL", "https://hooks.example/x")
+    monkeypatch.setenv("TEST_HOOK_SECRET", "s")
+    with_check = bundle(tmp_path, "freshness: {column: loaded_at, maxAgeMinutes: 30}\nchecks: [{name: c1, sql: 'select 0'}]")
+    engine.apply_bundle(db, with_check, "t")
+    db.commit()
+    mon = db.scalar(select(Monitor).where(Monitor.name == "orders.check.c1"))
+    engine.record_result(db, mon, Result("fail", "Assertion returned 3"), 5, utcnow(), public_url="https://nw.example")
+    db.commit()
+    queued = db.scalars(select(AlertDelivery)).all()
+    assert queued
+
+    removed = engine.apply_bundle(db, bundle(tmp_path), "bob")  # check c1 removed from the contract
+    db.commit()
+    assert "check/orders.check.c1" in removed.deleted
+    db.expire_all()
+    mon = db.scalar(select(Monitor).where(Monitor.name == "orders.check.c1"))
+    assert mon is not None and mon.retired_at is not None and not mon.enabled
+    incident = db.scalar(select(Incident).where(Incident.monitor_id == mon.id))
+    assert incident.status == "resolved" and incident.resolved_by == "bob"
+    assert db.scalar(select(IncidentEvent).where(IncidentEvent.kind == "resolved")).message.startswith("Closed because")
+    assert len(db.scalars(select(AlertDelivery)).all()) == len(queued)  # queued alerts were not cancelled
+    assert db.scalar(select(CheckRun).where(CheckRun.monitor_id == mon.id)) is not None
+    assert [m.name for m in db.scalar(select(Contract)).active_monitors] == ["orders.freshness"]
+
+    engine.apply_bundle(db, with_check, "t")  # adding it back revives the same check with its history
+    db.commit()
+    db.expire_all()
+    revived = db.scalar(select(Monitor).where(Monitor.name == "orders.check.c1"))
+    assert revived.id == mon.id and revived.enabled and revived.retired_at is None
+
+    engine.apply_bundle(db, bundle(tmp_path, extra=""), "t", prune=False)
+    pruned = engine.apply_bundle(db, load_bundle([_conn_only(tmp_path)]), "carol", prune=True)
+    db.commit()
+    db.expire_all()
+    assert "contract/orders" in pruned.deleted
+    assert db.scalar(select(Contract)).retired_at is not None
+    assert db.scalar(select(Incident).where(Incident.monitor_id == mon.id)) is not None
+
+
+def _conn_only(tmp_path):
+    path = tmp_path / "conn.yaml"
+    path.write_text(CONNECTION_YAML)
+    return path

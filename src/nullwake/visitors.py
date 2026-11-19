@@ -68,7 +68,10 @@ def _header(headers: dict, name: str) -> str:
 def _referrer(raw: str, own_host: str) -> str | None:
     if not raw:
         return None
-    host = (urlsplit(raw).hostname or "").lower()
+    try:  # a client can send any Referer; a malformed one must not break the report
+        host = (urlsplit(raw).hostname or "").lower()
+    except ValueError:
+        return None
     if not host or host == own_host:
         return None
     host = host.removeprefix("www.").removeprefix("m.")

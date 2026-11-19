@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
-from .connectors import ConnectorError, open_connector
+from .connectors import ConnectorError, open_connector, raw_errors_logged
 from .contracts import Bundle
 from .models import (AlertChannel, AlertDelivery, AuditEntry, CheckRun, Connection, Contract, Incident,
                      IncidentEvent, Monitor, utcnow)
@@ -34,6 +34,20 @@ class ApplySummary:
         return {k: getattr(self, k) for k in ("created", "updated", "unchanged", "deleted")}
 
 
+def retire_monitor(session: Session, mon: Monitor, actor: str, reason: str) -> None:
+    """Stop running a check without erasing what it found: runs, incidents and queued alerts are kept.
+    An open incident is closed with a note, since nothing will ever run to resolve it."""
+    now = utcnow()
+    mon.enabled, mon.retired_at = False, now
+    session.execute(update(Monitor).where(Monitor.id == mon.id).values(
+        lease_owner=None, lease_token=None, lease_expires_at=None))
+    incident = active_incident(session, mon.id, lock=True)
+    if incident is not None:
+        incident.status, incident.resolved_at, incident.resolved_by = "resolved", now, actor
+        session.add(IncidentEvent(incident_id=incident.id, at=now, actor=actor, kind="resolved",
+                                  message=f"Closed because the check was retired: {reason}"))
+
+
 def apply_bundle(session: Session, bundle: Bundle, actor: str, prune: bool = False) -> ApplySummary:
     summary = ApplySummary()
 
@@ -48,11 +62,16 @@ def apply_bundle(session: Session, bundle: Bundle, actor: str, prune: bool = Fal
             for k, v in changed.items():
                 setattr(row, k, v)
             summary.updated.append(f"{label}/{name}")
-        else:
-            summary.unchanged.append(f"{label}/{name}")
+            return True
+        summary.unchanged.append(f"{label}/{name}")
+        return False
 
     for c in bundle.connections:
-        upsert(Connection, c.name, "connection", {"type": c.type, "spec": c.spec})
+        if upsert(Connection, c.name, "connection", {"type": c.type, "spec": c.spec}):
+            # Same name, different warehouse settings: a run in flight against the old settings must not decide
+            # the health of the new ones. Drop those claims (their results are discarded) and rerun at once.
+            session.execute(update(Monitor).where(Monitor.connection_name == c.name, Monitor.retired_at.is_(None))
+                            .values(lease_owner=None, lease_token=None, lease_expires_at=None, next_run_at=utcnow()))
     for ch in bundle.channels:
         upsert(AlertChannel, ch.name, "channel", {"type": ch.type, "spec": ch.spec,
                                                   "min_severity": ch.min_severity, "enabled": True})
@@ -74,17 +93,18 @@ def apply_bundle(session: Session, bundle: Bundle, actor: str, prune: bool = Fal
         contract.owner, contract.description = cdef.owner, cdef.description
         contract.connection_name, contract.dataset = cdef.connection, cdef.dataset
         contract.source_yaml, contract.checksum, contract.spec = cdef.source_yaml, cdef.checksum, cdef.spec
+        contract.retired_at = None
         session.flush()
         wanted = {m.name: m for m in cdef.monitors}
         for existing in list(contract.monitors):
-            if existing.name not in wanted:
-                session.delete(existing)
+            if existing.name not in wanted and existing.retired_at is None:
+                retire_monitor(session, existing, actor, "removed from the contract")
                 summary.deleted.append(f"check/{existing.name}")
         for mdef in cdef.monitors:
             mon = session.scalar(select(Monitor).where(Monitor.name == mdef.name))
             values = {"contract_id": contract.id, "connection_name": mdef.connection, "kind": mdef.kind,
                       "dataset": mdef.dataset, "params": mdef.params, "severity": mdef.severity,
-                      "interval_seconds": mdef.interval_seconds, "enabled": True}
+                      "interval_seconds": mdef.interval_seconds, "enabled": True, "retired_at": None}
             if mon is None:
                 session.add(Monitor(name=mdef.name, next_run_at=utcnow(), state={}, **values))
             else:
@@ -101,9 +121,12 @@ def apply_bundle(session: Session, bundle: Bundle, actor: str, prune: bool = Fal
                     mon.state, mon.next_run_at = {}, utcnow()
     if prune:
         keep = {c.name for c in bundle.contracts}
-        for contract in session.scalars(select(Contract)):
+        for contract in session.scalars(select(Contract).where(Contract.retired_at.is_(None))):
             if contract.name not in keep:
-                session.delete(contract)
+                contract.retired_at = utcnow()
+                for mon in contract.monitors:
+                    if mon.retired_at is None:
+                        retire_monitor(session, mon, actor, f"contract {contract.name} was removed")
                 summary.deleted.append(f"contract/{contract.name}")
     audit(session, actor, "config.apply", "", **summary.as_dict())
     session.flush()
@@ -146,7 +169,10 @@ def run_spec(spec: CheckSpec, timeout_seconds: int) -> tuple[Result, int, dateti
         except ConnectorError as exc:
             result = Result("error", str(exc))
         except Exception as exc:  # never let one bad check kill the worker
-            log.exception("check %s crashed", spec.name)
+            if raw_errors_logged():
+                log.exception("check %s crashed", spec.name)
+            else:  # an unexpected driver exception's text can quote warehouse values
+                log.error("check %s crashed: %s", spec.name, exc.__class__.__name__)
             result = Result("error", f"internal error: {exc.__class__.__name__}")
     return result, int((time.monotonic() - t0) * 1000), started
 

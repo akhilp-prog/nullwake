@@ -136,4 +136,5 @@ Set `NULLWAKE_ACCESS_LOG` if the log lives somewhere other than `/var/log/nullwa
 | `NULLWAKE_DEADMAN_URL` | unset | URL each worker GETs about once a minute (dead man's switch) |
 | `NULLWAKE_ACCESS_LOG` | /var/log/nullwake/access.log | Caddy access log read by the Visitors page |
 | `NULLWAKE_CONTACT_NAME` / `_EMAIL` / `_LINKEDIN` / `_GITHUB` | unset | contact details shown on the sign-in page and footer |
+| `NULLWAKE_LOG_WAREHOUSE_ERRORS` | off | log raw warehouse error text (can quote data; debugging only) |
 | `NULLWAKE_LOG_LEVEL` | INFO | log level |

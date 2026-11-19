@@ -9,7 +9,7 @@
 <table>
   <thead><tr><th>Check</th><th>Kind</th><th>Status</th><th>Latest result</th><th>Trend</th><th>Last run</th></tr></thead>
   <tbody>
-  {% for mon in contract.monitors %}
+  {% for mon in contract.active_monitors %}
   <tr>
     <td><a href="/checks/{{ mon.id }}"><b>{{ mon.name.split('.', 1)[1] }}</b></a><small class="block">{{ m.sev(mon.severity) }}</small></td>
     <td>{{ mon.kind|replace('_', ' ') }}</td><td>{{ m.status(mon.last_status) }}</td>

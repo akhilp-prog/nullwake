@@ -81,15 +81,21 @@ def check_volume(conn: Connector, dataset: str, params: dict, state: dict) -> Re
     return Result("pass", f"{label}, within {low:,.0f}–{high:,.0f}", current, observed)
 
 
-def _diff(expected: list[dict], actual: list[dict], allow_extra: bool) -> tuple[list[str], list[str]]:
+def _diff(expected: list[dict], actual: list[dict], allow_extra: bool,
+          compare_nullability: bool = False) -> tuple[list[str], list[str]]:
+    """compare_nullability is for baselines (observed DDL). In a contract, nullable: false is enforced on the
+    values by its own not_null check, since many tables (e.g. CREATE TABLE AS) declare every column nullable."""
     actual_by = {c["name"].lower(): c for c in actual}
     problems, notes = [], []
     for col in expected:
         got = actual_by.get(col["name"])
         if got is None:
             problems.append(f"missing column {col['name']}")
-        elif col.get("type") and got["type"] != col["type"]:
-            problems.append(f"{col['name']} is {got['type']}, expected {col['type']}")
+        else:
+            if col.get("type") and got["type"] != col["type"]:
+                problems.append(f"{col['name']} is {got['type']}, expected {col['type']}")
+            if compare_nullability and col.get("nullable") is False and got.get("nullable"):
+                problems.append(f"{col['name']} now allows NULLs, expected NOT NULL")
     extra = sorted(set(actual_by) - {c["name"] for c in expected})
     if extra:
         (notes if allow_extra else problems).append("new column(s): " + ", ".join(extra))
@@ -109,7 +115,7 @@ def check_schema(conn: Connector, dataset: str, params: dict, state: dict) -> Re
         if not baseline:
             return Result("pass", f"Baseline captured: {len(actual)} columns", len(actual), observed,
                           {**state, "baseline": actual})
-        problems, notes = _diff(baseline, actual, allow_extra=False)
+        problems, notes = _diff(baseline, actual, allow_extra=False, compare_nullability=True)
     if problems:
         return Result("fail", "Schema drift: " + "; ".join(problems), len(actual), observed)
     suffix = f" ({'; '.join(notes)})" if notes else ""

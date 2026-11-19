@@ -27,10 +27,12 @@ someone notices. Nullwake makes the producer's promises explicit and checks them
   in pull requests and are applied with `nullwake apply` or `POST /api/v1/config/apply`.
 - **Read-only by construction.** Postgres checks run in `READ ONLY` transactions with a statement timeout;
   identifiers are validated, never interpolated from free text; custom SQL must be a single `SELECT`.
-  Only aggregates leave the warehouse. No rows are copied, and warehouse error text is redacted before it is stored. If you enable Slack or webhook alerts, those messages
+  Built-in checks read back counts and aggregates only; a custom SQL check returns one number chosen by its author, so
+  review assertion SQL like any other code. No result rows are copied, and warehouse error text is reduced to its
+  error class and SQLSTATE before it is stored or logged. If you enable Slack or webhook alerts, those messages
   carry check, dataset and owner names and the aggregate values; see [what leaves the network](docs/security.md#what-leaves-the-network).
-- **Secrets never stored.** Connections reference environment variables (`dsnEnv: WAREHOUSE_DSN`). Inline
-  secrets are rejected at validation time.
+- **Credentials stay in your environment.** Connections name environment variables (`dsnEnv: WAREHOUSE_DSN`) instead
+  of holding credentials, and connection fields that look like inline secrets are rejected at validation time.
 - **Incidents, not alert spam.** One active incident per failing check (enforced by a partial unique index),
   deduplicated repeats, a timeline of every change, acknowledgement and notes, and automatic resolution.
 - **Reliable alerting.** Slack and signed webhooks (HMAC-SHA256) are queued in a transactional outbox and

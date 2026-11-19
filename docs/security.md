@@ -3,13 +3,21 @@
 ## Data handling
 
 - Nullwake stores **metadata and aggregates only**: row counts, ages, null counts, duplicate counts, column names and
-  types, assertion results. No warehouse rows are copied to the metadata store, logs or alerts.
+  types, assertion results. Built-in checks never read rows back; a custom assertion returns one number its author
+  chooses (see the limits below). Warehouse error text is reduced to its error class and SQLSTATE before it is stored,
+  alerted on or logged; set `NULLWAKE_LOG_WAREHOUSE_ERRORS=1` only while debugging, because raw driver messages can
+  quote values.
+- **Who can write custom SQL.** Anyone with the editor role can apply a contract, and so can run any single `SELECT`
+  that the connection's warehouse role allows. Treat editors as trusted warehouse readers and keep the role's grants
+  to the contracted tables.
 - Query load: checks are read-only but still use warehouse resources. Grant `SELECT` on the contracted tables only
   (not whole schemas) where you can, give Nullwake its own small warehouse or resource group, and measure check
   durations (`check_runs.duration_ms`) against a representative workload before widening the rollout.
 - Custom assertions must be a single `SELECT`/`WITH` statement returning one number. This lexical guard is defense
   in depth; the security boundary is the warehouse role below.
-- **Access logs.** Caddy keeps an access log for visitor statistics. It is filtered before it reaches disk: client IPs are masked to /24 (IPv4) or /48 (IPv6), query strings are removed, and `Cookie`, `Authorization`, CSRF and `Set-Cookie` headers are dropped. Log files are deleted after 30 days.
+- **Access logs.** Caddy keeps an access log for visitor statistics. It is filtered before it reaches disk: client IPs are masked to /24 (IPv4) or /48 (IPv6), query strings are removed from the request and from the `Referer`, forwarded-IP headers and `Cookie`, `Authorization`,
+CSRF and `Set-Cookie` headers are dropped. The log keeps paths, timestamps and user agents. Rotated log files are
+deleted after 30 days; the active file rotates at 10 MiB, so on a quiet instance it can hold older entries until then.
 
 ## What leaves the network
 
@@ -81,7 +89,7 @@ every freshness age by the UTC offset. If a table stores local wall-clock time i
 boundary: never point Nullwake at a role that owns or can write to the tables.
 
 **BigQuery**: a service account with `roles/bigquery.dataViewer` on the datasets and `roles/bigquery.jobUser` on the
-project. Every job carries `maximum_bytes_billed` (default 10 GiB; `maximumBytesBilled` in the connection spec) and
+project. Every query job, including schema lookups, carries `maximum_bytes_billed` (default 10 GiB; `maximumBytesBilled` in the connection spec) and
 the label `tool=nullwake`.
 
 ## Secrets

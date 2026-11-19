@@ -88,3 +88,11 @@ def test_visitors_page_is_admin_only(client, seeded, tmp_path, monkeypatch):
     r = client.get("/visitors")
     assert r.status_code == 200 and "<strong>1</strong>" in r.text and "/login" in r.text
     get_settings.cache_clear()
+
+
+def test_malformed_referrer_does_not_break_the_report(tmp_path):
+    log = tmp_path / "access.log"
+    log.write_text(line(NOW - timedelta(hours=1), "/login", referer="http://[not-a-host/x") +
+                   line(NOW - timedelta(hours=1), "/login", ip="198.51.100.0", referer="https://lnkd.in/abc"))
+    stats = visitors.compute(str(log), "app.example", days=7, now=NOW)
+    assert stats.visitors == 2 and dict(stats.referrers) == {"linkedin.com": 1}

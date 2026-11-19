@@ -24,12 +24,21 @@ SAFE_REASONS = {
 }
 
 
+def raw_errors_logged() -> bool:
+    """Warehouse error text can quote row values. It reaches this host's log only when an operator opts in for
+    debugging (NULLWAKE_LOG_WAREHOUSE_ERRORS=1); by default only the error class and SQLSTATE are logged."""
+    return os.environ.get("NULLWAKE_LOG_WAREHOUSE_ERRORS", "").lower() in ("1", "true", "yes")
+
+
 def redacted(name: str, exc: BaseException) -> "ConnectorError":
     """Warehouse error text can quote data (e.g. `invalid input syntax for type integer: "4111-..."`). Keep only the
     error class and SQLSTATE in anything that is stored or alerted on; the full text goes to this host's log only."""
     code = getattr(exc, "sqlstate", None) or getattr(exc, "sqlstate_code", None) or getattr(exc, "code", None)
-    log.warning("warehouse error on %s: %s", name, str(exc).strip()[:2000])
     code = code if isinstance(code, str) else ""
+    if raw_errors_logged():
+        log.warning("warehouse error on %s: %s", name, str(exc).strip()[:2000])
+    else:
+        log.warning("warehouse error on %s: %s (SQLSTATE %s)", name, exc.__class__.__name__, code or "unknown")
     reason = SAFE_REASONS.get(code) or SAFE_REASONS.get(code[:2]) or exc.__class__.__name__
     return ConnectorError(f"{name}: query failed: {reason}" + (f" (SQLSTATE {code})" if code else ""))
 
@@ -244,7 +253,14 @@ class PostgresConnector(Connector):
 
     def columns(self, dataset: str) -> list[ColumnInfo]:
         parts = split_dataset(dataset, 2)
-        schema, table = (parts if len(parts) == 2 else ["public", parts[0]])
+        if len(parts) == 2:
+            schema, table = parts
+        else:  # resolve a bare name the way the checks' own queries do: through the session's search_path
+            found = self._run("SELECT n.nspname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+                              "WHERE c.oid = to_regclass(%s)", (parts[0],))
+            if not found:
+                return []
+            schema, table = found[0][0], parts[0]
         rows = self._run(
             "SELECT column_name, data_type, is_nullable = 'YES' FROM information_schema.columns "
             "WHERE table_schema = lower(%s) AND table_name = lower(%s) ORDER BY ordinal_position",
@@ -286,7 +302,8 @@ class SnowflakeConnector(Connector):
         try:
             self.conn = snowflake.connector.connect(**params)
         except Exception as exc:
-            log.warning("cannot connect to Snowflake connection %s: %s", name, str(exc).strip()[:2000])
+            log.warning("cannot connect to Snowflake connection %s: %s", name,
+                        str(exc).strip()[:2000] if raw_errors_logged() else exc.__class__.__name__)
             raise ConnectorError(f"cannot connect to {name}: {exc.__class__.__name__}") from None
 
     def _run(self, sql: str, params: tuple | None = None) -> list[tuple]:
@@ -361,7 +378,9 @@ class BigQueryConnector(Connector):  # pragma: no cover - requires a GCP project
             project, (ds, table) = bq_project(self.spec.get("project", "")), parts
         sql = (f"SELECT column_name, data_type, is_nullable = 'YES' FROM `{project}.{ds}.INFORMATION_SCHEMA.COLUMNS` "
                f"WHERE table_name = @t ORDER BY ordinal_position")
-        config = self.bq.QueryJobConfig(query_parameters=[self.bq.ScalarQueryParameter("t", "STRING", table)])
+        config = self.bq.QueryJobConfig(
+            query_parameters=[self.bq.ScalarQueryParameter("t", "STRING", table)], labels={"tool": "nullwake"},
+            maximum_bytes_billed=int(self.spec.get("maximumBytesBilled", 10 * 1024**3)))
         rows = self.client.query(sql, job_config=config).result(timeout=self.timeout)
         return [ColumnInfo(r[0], self.dialect.normalize_type(r[1]), bool(r[2])) for r in rows]
 

@@ -120,10 +120,10 @@ def overview(request: Request, db: Session = Depends(get_db), user: Principal = 
                         .order_by(Incident.severity.desc(), Incident.opened_at)).unique().all()
     recent = db.scalars(select(Incident).where(Incident.status == "resolved")
                         .order_by(Incident.resolved_at.desc()).limit(5)).unique().all()
-    contracts = db.scalars(select(Contract).order_by(Contract.name)).all()
+    contracts = db.scalars(select(Contract).where(Contract.retired_at.is_(None)).order_by(Contract.name)).all()
     health = []
     for c in contracts:
-        statuses = [m.last_status or "pending" for m in c.monitors]
+        statuses = [m.last_status or "pending" for m in c.active_monitors]
         worst = next((s for s in ("error", "fail", "pending") if s in statuses), "pass")
         health.append({"contract": c, "worst": worst, "passing": statuses.count("pass"), "total": len(statuses)})
     beat = db.scalar(select(func.max(WorkerHeartbeat.heartbeat_at)))
@@ -194,7 +194,7 @@ def incident_action(request: Request, incident_id: int, action: str, csrf: str =
 
 @router.get("/contracts")
 def contracts(request: Request, db: Session = Depends(get_db), user: Principal = Depends(page_user)):
-    rows = db.scalars(select(Contract).order_by(Contract.name)).all()
+    rows = db.scalars(select(Contract).where(Contract.retired_at.is_(None)).order_by(Contract.name)).all()
     return render(request, "contracts.html", user, contracts=rows)
 
 
@@ -204,7 +204,7 @@ def contract_detail(request: Request, name: str, db: Session = Depends(get_db), 
     if contract is None:
         raise HTTPException(404, "contract not found")
     sparks = {}
-    for m in contract.monitors:
+    for m in contract.active_monitors:
         values = db.scalars(select(CheckRun.value).where(CheckRun.monitor_id == m.id)
                             .order_by(CheckRun.id.desc()).limit(40)).all()
         sparks[m.id] = sparkline(list(reversed(values)))

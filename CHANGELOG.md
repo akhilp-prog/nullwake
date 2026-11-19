@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.6.0 (2026-11-19)
+
+Fixes from an external review of 0.5.0, each with a regression test. Theme: no false green.
+
+- The Docker image now includes the Snowflake and BigQuery drivers (previously the stock image could only run Postgres).
+- BigQuery project IDs with hyphens (all real ones, e.g. `acme-analytics`) are accepted; schema lookups now carry the
+  same billing cap and label as check queries.
+- A custom check that returns NULL or a non-finite number is an error, never a pass that resolves an incident.
+- Freshness fails when the newest timestamp is in the future beyond `maxFutureSkewMinutes` (default 5), so one
+  bad row cannot hide a stopped load; the current volume window now ends at the current time.
+- Removing a check or contract retires it instead of deleting it: runs, incidents and queued alerts are kept, open
+  incidents are closed with a note, and re-adding the check revives it with its history (migration 0004).
+- Changing a connection's settings under the same name discards any run in flight against the old settings and
+  reruns its checks at once.
+- Schema baselines now catch a column changing from NOT NULL to nullable. Bare Postgres table names are looked up
+  through the session's `search_path`, the same table the checks query.
+- Visitors page: a malformed `Referer` no longer breaks the report; referrer query strings and forwarded-IP headers
+  are dropped from the access log before it reaches disk.
+- Raw warehouse error text is no longer logged by default (`NULLWAKE_LOG_WAREHOUSE_ERRORS=1` to opt in while
+  debugging); README and security docs now describe exactly what custom SQL can return and who can write it.
+
 ## 0.5.0 (2026-11-19)
 
 - Snowflake connector hardened for pilots: sessions now run in UTC (Snowflake defaults to America/Los_Angeles, which

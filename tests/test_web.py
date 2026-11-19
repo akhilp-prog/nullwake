@@ -48,7 +48,7 @@ def login(client, email):
 def test_health_ready_metrics_and_headers(client, seeded):
     assert client.get("/healthz").text == "ok\n"
     ready = client.get("/readyz").json()
-    assert ready["ready"] is True and ready["migration"] == "0003"
+    assert ready["ready"] is True and ready["migration"] == "0004"
     metrics = client.get("/metrics").text
     assert 'nullwake_incidents_active{severity="critical"} 1.0' in metrics
     assert 'nullwake_checks{status="fail"} 1.0' in metrics

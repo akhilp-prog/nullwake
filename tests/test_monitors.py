@@ -133,3 +133,26 @@ def test_missing_env_is_reported():
         assert "NOT_SET_ANYWHERE is not set" in str(exc)
     else:
         raise AssertionError("expected ConnectorError")
+
+
+def test_schema_catches_not_null_becoming_nullable(wh, pg):
+    wh.execute("CREATE TABLE nwtest.accounts (id bigint NOT NULL, email text)")
+    expected = [{"name": "id", "type": "bigint", "nullable": False}, {"name": "email", "type": "text", "nullable": True}]
+    first = evaluate(pg, "schema", "nwtest.accounts", {})
+    wh.execute("ALTER TABLE nwtest.accounts ALTER COLUMN id DROP NOT NULL")  # every row still has an id
+    drift = evaluate(pg, "schema", "nwtest.accounts", {}, first.state)
+    assert drift.status == "fail" and "id now allows NULLs" in drift.message
+    # contract mode: nullable: false is a rule about values (its not_null check), not about the DDL
+    assert evaluate(pg, "schema", "nwtest.accounts", {"expected": expected}).status == "pass"
+
+
+def test_bare_postgres_name_resolves_through_search_path(wh, pg):
+    wh.execute("CREATE TABLE public.nw_bare (a int)")
+    wh.execute("CREATE TABLE nwtest.nw_bare (a int, b text)")
+    try:
+        pg.conn.execute("SET search_path TO nwtest, public")
+        pg.conn.commit()
+        cols = [c.name for c in pg.columns("nw_bare")]
+        assert cols == ["a", "b"]  # the same table that freshness/volume/null queries on "nw_bare" would read
+    finally:
+        wh.execute("DROP TABLE public.nw_bare")
