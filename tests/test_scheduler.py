@@ -214,6 +214,16 @@ def test_dead_mans_switch_pings_only_while_healthy():
     assert len(hits) == 1
 
 
+def test_dead_mans_switch_pings_right_after_boot(monkeypatch):
+    """The monotonic clock can be under 60 s on a freshly booted host; the first ping must still go out."""
+    import nullwake.worker as worker
+    monkeypatch.setattr(worker.time, "monotonic", lambda: 5.0)
+    hits = []
+    client = httpx.Client(transport=httpx.MockTransport(lambda req: hits.append(req) or httpx.Response(200)))
+    assert ping_deadman(client, "https://hc.example/ping", {}, healthy=True) is True
+    assert len(hits) == 1
+
+
 def test_stuck_worker_loop_exits_so_it_is_restarted():
     import subprocess
     import sys

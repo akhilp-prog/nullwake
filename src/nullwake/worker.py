@@ -189,9 +189,11 @@ def ping_deadman(client: httpx.Client, url: str, state: dict, healthy: bool) -> 
     """Outbound dead man's switch, at most once a minute, and only while the whole deployment is healthy (the same
     test as /watchdog: workers alive, nothing overdue, checks executing, alerts flowing). When it is not, the pings
     stop and the external service alerts through its own channel. Returns True if a ping was sent."""
-    if not url or not healthy or time.monotonic() - state.get("last", 0.0) < 60:
+    now = time.monotonic()
+    last = state.get("last")  # None until the first ping; monotonic time can be < 60 s just after boot
+    if not url or not healthy or (last is not None and now - last < 60):
         return False
-    state["last"] = time.monotonic()
+    state["last"] = now
     try:
         client.get(url, timeout=5.0)
         return True
