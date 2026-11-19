@@ -156,7 +156,7 @@ GRANT ROLE NULLWAKE_READER TO USER NULLWAKE_SVC;</code></pre>
     <li><b>One organisation per deployment.</b> There is no multi-tenancy, which also means no data is shared between customers.</li>
     <li><b>Single host as shipped.</b> The bundled setup has no high availability. Nullwake's own state is one Postgres database: back it up daily, and test a restore before production. Instructions are in the <a href="https://github.com/akhilp-prog/nullwake/blob/main/docs/operations.md">operations guide</a>.</li>
     <li><b>Internal endpoints.</b> Metrics and readiness endpoints have no authentication and are blocked at the bundled proxy. Expose them only on internal networks.</li>
-    <li><b>Early product.</b> Nullwake is at version 0.6. Postgres is tested end to end, Snowflake is verified against a live account, and BigQuery is in beta.</li>
+    <li><b>Early product.</b> Nullwake is at version 0.6. Postgres is tested end to end, and Snowflake and BigQuery are verified against live accounts.</li>
   </ul>
 </section>
 
