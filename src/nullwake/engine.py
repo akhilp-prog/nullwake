@@ -108,6 +108,7 @@ def apply_bundle(session: Session, bundle: Bundle, actor: str, prune: bool = Fal
             if mon is None:
                 session.add(Monitor(name=mdef.name, next_run_at=utcnow(), state={}, **values))
             else:
+                revived = mon.retired_at is not None
                 definition_changed = any(getattr(mon, k) != values[k] for k in ("kind", "dataset", "params"))
                 connection_changed = mon.connection_name != values["connection_name"]
                 for k, v in values.items():
@@ -117,8 +118,10 @@ def apply_bundle(session: Session, bundle: Bundle, actor: str, prune: bool = Fal
                     # Written as an UPDATE, not via attributes: this session's copy of the row may predate the claim.
                     session.execute(update(Monitor).where(Monitor.id == mon.id).values(
                         lease_owner=None, lease_token=None, lease_expires_at=None))
-                if definition_changed:
+                if definition_changed or revived:
                     mon.state, mon.next_run_at = {}, utcnow()
+                if revived:  # its last result predates the retirement: show "pending" until it runs again
+                    mon.last_status, mon.last_message = None, "Re-added; waiting for its first run"
     if prune:
         keep = {c.name for c in bundle.contracts}
         for contract in session.scalars(select(Contract).where(Contract.retired_at.is_(None))):

@@ -156,3 +156,13 @@ def test_bare_postgres_name_resolves_through_search_path(wh, pg):
         assert cols == ["a", "b"]  # the same table that freshness/volume/null queries on "nw_bare" would read
     finally:
         wh.execute("DROP TABLE public.nw_bare")
+
+
+def test_bare_name_in_a_mixed_case_schema(wh, pg):
+    wh.execute('CREATE SCHEMA "MixedCase"; CREATE TABLE "MixedCase".orders_mc (id int, note text)')
+    try:
+        pg.conn.execute('SET search_path TO "MixedCase", public')
+        pg.conn.commit()
+        assert [c.name for c in pg.columns("orders_mc")] == ["id", "note"]
+    finally:
+        wh.execute('DROP SCHEMA "MixedCase" CASCADE')

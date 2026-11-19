@@ -2,7 +2,7 @@
 
 ## Data handling
 
-- Nullwake stores **metadata and aggregates only**: row counts, ages, null counts, duplicate counts, column names and
+- Built-in checks store **metadata and aggregates only**: row counts, ages, null counts, duplicate counts, column names and
   types, assertion results. Built-in checks never read rows back; a custom assertion returns one number its author
   chooses (see the limits below). Warehouse error text is reduced to its error class and SQLSTATE before it is stored,
   alerted on or logged; set `NULLWAKE_LOG_WAREHOUSE_ERRORS=1` only while debugging, because raw driver messages can

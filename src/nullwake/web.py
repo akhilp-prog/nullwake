@@ -234,6 +234,8 @@ def check_action(request: Request, check_id: int, action: str, csrf: str = Form(
     if monitor is None:
         raise HTTPException(404, "check not found")
     if action == "run":
+        if monitor.retired_at is not None or not monitor.enabled:
+            raise HTTPException(409, "check is retired or disabled and will not run")
         engine.request_run(monitor)
         engine.audit(db, user.email, "check.run_now", f"check/{monitor.name}")
     elif action == "accept-schema":

@@ -183,7 +183,7 @@ def parse_contract(doc: dict, where: str, source_yaml: str, connection_types: di
     dialect = DIALECTS[connection_types[connection]]
     dataset = _req(spec, "dataset", f"{where}.spec")
     try:
-        split_dataset(dataset)
+        dialect.table(dataset)  # dialect-aware: BigQuery project IDs contain hyphens
     except ConnectorError as exc:
         raise ContractError(f"{where}.spec.dataset: {exc}") from None
     schedule = spec.get("schedule", {}) or {}
@@ -234,6 +234,7 @@ def parse_contract(doc: dict, where: str, source_yaml: str, connection_types: di
         add("freshness", "freshness", {
             "column": _ident(_req(fresh, "column", fw), f"{fw}.column").lower(),
             "maxAgeMinutes": _num(fresh, "maxAgeMinutes", fw, 0, 1, 525600),
+            "maxFutureSkewMinutes": _num(fresh, "maxFutureSkewMinutes", fw, 5, 0, 1440),
         }, _severity(fresh, fw, "critical"))
 
     vol = spec.get("volume")

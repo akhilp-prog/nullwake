@@ -132,6 +132,10 @@ def test_api_tokens_and_rbac(client, seeded, db):
     assert client.post(f"/api/v1/checks/{seeded.monitor_id}/run", headers=e).status_code == 202
     runs = client.get(f"/api/v1/checks/{seeded.monitor_id}/runs", headers=v).json()
     assert runs[0]["status"] == "fail"
+    mon = db.get(Monitor, seeded.monitor_id)
+    mon.enabled, mon.retired_at = False, utcnow()
+    db.commit()
+    assert client.post(f"/api/v1/checks/{seeded.monitor_id}/run", headers=e).status_code == 409  # would never run
 
 
 def test_api_config_apply(client, seeded, db):

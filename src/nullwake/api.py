@@ -87,6 +87,8 @@ def run_now(check_id: int, request: Request, db: Session = Depends(get_db),
     m = db.get(Monitor, check_id)
     if m is None:
         raise HTTPException(404, "check not found")
+    if m.retired_at is not None or not m.enabled:
+        raise HTTPException(409, "check is retired or disabled and will not run")
     engine.request_run(m)
     engine.audit(db, principal.email, "check.run_now", f"check/{m.name}")
     return {"queued": True}

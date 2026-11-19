@@ -254,16 +254,16 @@ class PostgresConnector(Connector):
     def columns(self, dataset: str) -> list[ColumnInfo]:
         parts = split_dataset(dataset, 2)
         if len(parts) == 2:
-            schema, table = parts
+            schema, table = parts[0].lower(), parts[1].lower()  # unquoted identifiers fold to lower case
         else:  # resolve a bare name the way the checks' own queries do: through the session's search_path
-            found = self._run("SELECT n.nspname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
-                              "WHERE c.oid = to_regclass(%s)", (parts[0],))
+            found = self._run("SELECT n.nspname, c.relname FROM pg_class c JOIN pg_namespace n "
+                              "ON n.oid = c.relnamespace WHERE c.oid = to_regclass(%s)", (parts[0],))
             if not found:
                 return []
-            schema, table = found[0][0], parts[0]
+            schema, table = found[0]  # exact catalog names (a quoted schema may be mixed case)
         rows = self._run(
             "SELECT column_name, data_type, is_nullable = 'YES' FROM information_schema.columns "
-            "WHERE table_schema = lower(%s) AND table_name = lower(%s) ORDER BY ordinal_position",
+            "WHERE table_schema = %s AND table_name = %s ORDER BY ordinal_position",
             (schema, table))
         return [ColumnInfo(r[0], self.dialect.normalize_type(r[1]), bool(r[2])) for r in rows]
 

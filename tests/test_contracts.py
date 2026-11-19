@@ -102,3 +102,29 @@ def test_guard_select():
     for bad in ("update t set a=1", "select 1; select 2", "copy t to '/tmp/x'"):
         with pytest.raises(ConnectorError):
             guard_select(bad)
+
+
+BQ_CONNECTION = """
+apiVersion: nullwake/v1
+kind: Connection
+metadata: {name: bq}
+spec: {type: bigquery, project: acme-analytics}
+"""
+
+
+def test_bigquery_three_part_dataset_with_hyphenated_project_compiles(tmp_path):
+    doc = contract_yaml("freshness: {column: loaded_at, maxAgeMinutes: 30}", dataset="acme-analytics.sales.orders")
+    doc = doc.replace("connection: wh", "connection: bq")
+    bundle = load_bundle([write(tmp_path, BQ_CONNECTION + "---" + doc)])
+    assert bundle.contracts[0].monitors[0].dataset == "acme-analytics.sales.orders"
+    with pytest.raises(ContractError):  # still rejected on a Postgres connection
+        load_bundle([write(tmp_path, CONNECTION_YAML + "---" + contract_yaml("", dataset="acme-analytics.sales.orders"))])
+
+
+def test_future_skew_setting_is_compiled_from_yaml(tmp_path):
+    body = "freshness: {column: loaded_at, maxAgeMinutes: 30, maxFutureSkewMinutes: 0}"
+    params = load_bundle([write(tmp_path, CONNECTION_YAML + "---" + contract_yaml(body))]).contracts[0].monitors[0].params
+    assert params["maxFutureSkewMinutes"] == 0
+    default = load_bundle([write(tmp_path, CONNECTION_YAML + "---" + contract_yaml(
+        "freshness: {column: loaded_at, maxAgeMinutes: 30}"))]).contracts[0].monitors[0].params
+    assert default["maxFutureSkewMinutes"] == 5

@@ -237,6 +237,8 @@ def test_removing_a_check_keeps_its_history_and_alerts(db, tmp_path, monkeypatch
     db.expire_all()
     revived = db.scalar(select(Monitor).where(Monitor.name == "orders.check.c1"))
     assert revived.id == mon.id and revived.enabled and revived.retired_at is None
+    # its old result predates the retirement: it shows pending and runs now, not a stale status for a whole interval
+    assert revived.last_status is None and revived.next_run_at <= utcnow()
 
     engine.apply_bundle(db, bundle(tmp_path, extra=""), "t", prune=False)
     pruned = engine.apply_bundle(db, load_bundle([_conn_only(tmp_path)]), "carol", prune=True)

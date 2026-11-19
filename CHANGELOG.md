@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.1 (2026-11-19)
+
+Fixes from a second external review (of 0.6.0), each with a regression test.
+
+- A check that is removed and then re-added no longer shows its old result for up to a full interval: it shows
+  pending and runs at once.
+- `freshness.maxFutureSkewMinutes` is now read from contract YAML (it was silently dropped).
+- BigQuery contracts accept three-part datasets with a hyphenated project (`acme-analytics.sales.orders`).
+- "Run now" on a retired or disabled check returns 409 instead of falsely confirming a run.
+- Bare Postgres table names in a mixed-case (quoted) schema resolve to the right columns.
+
 ## 0.6.0 (2026-11-19)
 
 Fixes from an external review of 0.5.0, each with a regression test. Theme: no false green.
@@ -14,7 +25,7 @@ Fixes from an external review of 0.5.0, each with a regression test. Theme: no f
   incidents are closed with a note, and re-adding the check revives it with its history (migration 0004).
 - Changing a connection's settings under the same name discards any run in flight against the old settings and
   reruns its checks at once.
-- Schema baselines now catch a column changing from NOT NULL to nullable. Bare Postgres table names are looked up
+- Schema baselines now detect the loss of an observed NOT NULL constraint. Bare Postgres table names are looked up
   through the session's `search_path`, the same table the checks query.
 - Visitors page: a malformed `Referer` no longer breaks the report; referrer query strings and forwarded-IP headers
   are dropped from the access log before it reaches disk.
