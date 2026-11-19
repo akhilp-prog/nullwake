@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0 (2026-11-19)
+
+- Visitor statistics for admins at `/visitors`: visitors, page views, demo sign-ins, referrers and top pages over 7 or 30 days, read from Caddy's access log. No cookies, no JavaScript, no third-party analytics.
+- The access log is privacy-filtered at write time: client IPs masked to /24 (IPv4) and /48 (IPv6), query strings stripped, cookie, authorization and CSRF headers dropped, and files deleted after 30 days.
+- Contact details on the sign-in page and footer, set with `NULLWAKE_CONTACT_NAME`, `_EMAIL`, `_LINKEDIN` and `_GITHUB`.
+
 ## 0.3.0 (2026-11-18)
 
 Fixes from a second external review.

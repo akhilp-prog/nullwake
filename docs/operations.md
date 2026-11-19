@@ -99,6 +99,14 @@ into a separate database served identical counts and history.)
   (`NULLWAKE_WORKER_LEASE_SECONDS`, default 3 × query timeout + 60 s). Tune `NULLWAKE_WORKER_BATCH_SIZE` and `NULLWAKE_QUERY_TIMEOUT_SECONDS`.
 - Run history grows with `checks × runs/day`; it is pruned hourly after `NULLWAKE_RETENTION_DAYS` (default 30).
 
+## Visitor statistics
+
+Admins can open **Visitors** in the navigation (`/visitors`) to see how many people reached the instance over the last 7 or 30 days: unique visitors, page views, demo sign-ins, where they came from and which pages they opened.
+
+The numbers come from Caddy's access log, written to the `access_logs` volume and mounted read-only into the web container. Nothing runs in the browser and no cookies are set for this. A visitor is a masked IP address plus browser, so people behind one office network may count once, and bots, health checks and the API are left out. Treat the numbers as an honest estimate, not an exact count.
+
+Set `NULLWAKE_ACCESS_LOG` if the log lives somewhere other than `/var/log/nullwake/access.log`.
+
 ## Common tasks
 
 | Task | Command |
@@ -126,4 +134,6 @@ into a separate database served identical counts and history.)
 | `NULLWAKE_WORKER_LEASE_SECONDS` | 3 × query timeout + 60 | how long a claimed run is protected before another worker may reclaim it |
 | `NULLWAKE_WATCHDOG_GRACE_SECONDS` | 300 | how late a check may be before `/watchdog` reports it overdue |
 | `NULLWAKE_DEADMAN_URL` | unset | URL each worker GETs about once a minute (dead man's switch) |
+| `NULLWAKE_ACCESS_LOG` | /var/log/nullwake/access.log | Caddy access log read by the Visitors page |
+| `NULLWAKE_CONTACT_NAME` / `_EMAIL` / `_LINKEDIN` / `_GITHUB` | unset | contact details shown on the sign-in page and footer |
 | `NULLWAKE_LOG_LEVEL` | INFO | log level |

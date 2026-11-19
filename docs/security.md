@@ -9,6 +9,7 @@
   durations (`check_runs.duration_ms`) against a representative workload before widening the rollout.
 - Custom assertions must be a single `SELECT`/`WITH` statement returning one number. This lexical guard is defense
   in depth; the security boundary is the warehouse role below.
+- **Access logs.** Caddy keeps an access log for visitor statistics. It is filtered before it reaches disk: client IPs are masked to /24 (IPv4) or /48 (IPv6), query strings are removed, and `Cookie`, `Authorization`, CSRF and `Set-Cookie` headers are dropped. Log files are deleted after 30 days.
 
 ## What leaves the network
 

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Visitors{% endblock %}
+{% block content %}
+<div class="heading"><div><p class="eyebrow">Admin</p><h1>Visitors</h1>
+<p class="muted">From the proxy's access log: no cookies, no scripts, no third party. IPs are masked before they are written, so counts are estimates. Bots, uptime checks and static files are left out.</p></div>
+<div class="tabs"><a href="/visitors?days=7" class="{{ 'on' if stats.days == 7 }}">7 days</a><a href="/visitors?days=30" class="{{ 'on' if stats.days == 30 }}">30 days</a></div></div>
+{% if not stats.log_found %}
+<section class="card"><p class="calm">No access log found at <code>{{ settings.access_log_path }}</code>. The bundled Caddy writes it; see docs/operations.md, "Visitor statistics".</p></section>
+{% else %}
+<div class="kpis three">
+  <div class="kpi"><span>Visitors</span><strong>{{ stats.visitors }}</strong></div>
+  <div class="kpi"><span>Page views</span><strong>{{ stats.page_views }}</strong></div>
+  <div class="kpi"><span>Demo sign-ins</span><strong>{{ stats.demo_sign_ins }}</strong></div>
+</div>
+<div class="grid">
+<section class="card flush"><table><thead><tr><th>Where visitors came from</th><th class="num">Views</th></tr></thead><tbody>
+{% for host, n in stats.referrers %}<tr><td>{{ host }}</td><td class="num">{{ n }}</td></tr>
+{% else %}<tr><td colspan="2" class="calm">No referrers yet (direct visits and typed links show no referrer).</td></tr>{% endfor %}
+</tbody></table></section>
+<section class="card flush"><table><thead><tr><th>Most viewed pages</th><th class="num">Views</th></tr></thead><tbody>
+{% for path, n in stats.pages %}<tr><td><code>{{ path }}</code></td><td class="num">{{ n }}</td></tr>
+{% else %}<tr><td colspan="2" class="calm">No page views yet.</td></tr>{% endfor %}
+</tbody></table></section>
+</div>
+<section class="card flush"><table><thead><tr><th>Day (UTC)</th><th class="num">Visitors</th><th class="num">Views</th><th class="bar"></th></tr></thead><tbody>
+{% for d in stats.daily %}<tr><td class="nowrap">{{ d.day }}</td><td class="num">{{ d.visitors }}</td><td class="num">{{ d.views }}</td>
+<td class="bar"><meter min="0" max="{{ top }}" value="{{ d.visitors }}">{{ d.visitors }}</meter></td></tr>{% endfor %}
+</tbody></table></section>
+<p class="small muted">{{ stats.bots_ignored }} bot and monitor requests ignored in this period.</p>
+{% endif %}
+{% endblock %}

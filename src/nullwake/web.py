@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from . import __version__, engine
-from .config import Settings
+from .config import Settings, get_settings
 from .deps import SESSION_COOKIE, client_ip, get_db, optional_principal, settings_dep, verify_mutation
 from .models import (AlertChannel, AlertDelivery, ApiToken, AuditEntry, CheckRun, Connection, Contract, Incident,
                      Monitor, WorkerHeartbeat, utcnow)
@@ -67,6 +67,7 @@ def page_user(principal: Principal | None = Depends(optional_principal)) -> Prin
 
 
 def render(request: Request, name: str, user: Principal | None, code: int = 200, **ctx) -> HTMLResponse:
+    ctx.setdefault("settings", get_settings())  # the shared footer shows the operator's contact links
     return templates.TemplateResponse(request, name, {"user": user, **ctx}, status_code=code)
 
 
@@ -261,6 +262,20 @@ def settings_page(request: Request, db: Session = Depends(get_db), user: Princip
                   tokens=db.scalars(select(ApiToken).order_by(ApiToken.id.desc())).all(),
                   workers=db.scalars(select(WorkerHeartbeat).order_by(WorkerHeartbeat.heartbeat_at.desc())).all(),
                   new_token=None)
+
+
+@router.get("/visitors", response_class=HTMLResponse)
+def visitors_page(request: Request, days: int = 30, user: Principal = Depends(page_user),
+                  settings: Settings = Depends(settings_dep)):
+    if not user.can("admin"):
+        raise HTTPException(403, "requires the admin role")
+    from urllib.parse import urlsplit
+
+    from . import visitors
+    days = 7 if days <= 7 else 30
+    stats = visitors.compute(settings.access_log_path, (urlsplit(settings.public_url).hostname or "").lower(), days)
+    top = max([d["visitors"] for d in stats.daily] + [1])
+    return render(request, "visitors.html", user, stats=stats, top=top)
 
 
 @router.post("/settings/tokens")

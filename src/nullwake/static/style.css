@@ -134,3 +134,12 @@ button.danger { color: var(--fail); }
   .top { flex-wrap: wrap; height: auto; padding: 10px 16px; gap: 8px; }
   .wrap { padding: 16px; }
 }
+.contact { margin-top: 14px; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; background: var(--panel); }
+.contact p { margin: 4px 0; }
+.contact .links a { margin-right: 14px; }
+.kpis.three { grid-template-columns: repeat(3, 1fr); }
+.tabs { display: flex; gap: 8px; align-self: flex-end; }
+.tabs a { padding: 4px 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); text-decoration: none; }
+.tabs a.on { color: inherit; border-color: currentColor; }
+td.num, th.num { text-align: right; }
+td.bar meter { width: 100%; min-width: 120px; }

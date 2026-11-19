@@ -3,7 +3,7 @@
 # Public demo with a simulated warehouse: docker compose --profile demo up -d --build
 x-app: &app
   build: .
-  image: nullwake:${NULLWAKE_VERSION:-0.3.0}
+  image: nullwake:${NULLWAKE_VERSION:-0.4.0}
   env_file: .env
   environment:
     NULLWAKE_DATABASE_URL: postgresql+psycopg://nullwake:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db/nullwake
@@ -43,6 +43,8 @@ services:
   web:
     <<: *app
     command: ["nullwake", "serve", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    volumes:
+      - access_logs:/var/log/nullwake:ro   # the proxy's privacy-filtered access log, for the admin Visitors page
     depends_on:
       migrate: {condition: service_completed_successfully}
 
@@ -70,6 +72,7 @@ services:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+      - access_logs:/var/log/nullwake
     depends_on:
       web: {condition: service_healthy}
     restart: unless-stopped
@@ -88,5 +91,6 @@ services:
 
 volumes:
   pgdata:
+  access_logs:
   caddy_data:
   caddy_config:

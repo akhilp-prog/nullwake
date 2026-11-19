@@ -1,5 +1,25 @@
 {$NULLWAKE_DOMAIN} {
 	encode zstd gzip
+	# Visit log for the admin "Visitors" page: client IPs masked to /24 (IPv4) and /48 (IPv6), no cookies,
+	# tokens or query strings. Kept 30 days, readable by the web container (mounted read-only there).
+	log {
+		output file /var/log/nullwake/access.log {
+			roll_size 10MiB
+			roll_keep 10
+			roll_keep_for 720h
+			mode 0644
+		}
+		format filter {
+			request>remote_ip ip_mask 24 48
+			request>client_ip ip_mask 24 48
+			request>headers>Cookie delete
+			request>headers>Authorization delete
+			request>headers>X-Csrf-Token delete
+			request>headers>X-Nullwake-Client delete
+			resp_headers>Set-Cookie delete
+			request>uri regexp "[?].*$" ""
+		}
+	}
 	# Metrics and readiness are for the internal network / your Prometheus only.
 	@internal path /metrics /readyz
 	respond @internal 404

@@ -29,6 +29,11 @@ class Settings:
     lease_seconds_override: int = 0
     deadman_url: str = ""
     watchdog_grace_seconds: int = 300
+    access_log_path: str = "/var/log/nullwake/access.log"
+    contact_name: str = ""
+    contact_email: str = ""
+    contact_linkedin: str = ""
+    contact_github: str = ""
     extra: dict = field(default_factory=dict)
 
     @property
@@ -70,6 +75,11 @@ def load_settings() -> Settings:
         lease_seconds_override=int(os.environ.get("NULLWAKE_WORKER_LEASE_SECONDS", "0")),
         deadman_url=os.environ.get("NULLWAKE_DEADMAN_URL", ""),
         watchdog_grace_seconds=int(os.environ.get("NULLWAKE_WATCHDOG_GRACE_SECONDS", "300")),
+        access_log_path=os.environ.get("NULLWAKE_ACCESS_LOG", "/var/log/nullwake/access.log"),
+        contact_name=os.environ.get("NULLWAKE_CONTACT_NAME", ""),
+        contact_email=os.environ.get("NULLWAKE_CONTACT_EMAIL", ""),
+        contact_linkedin=os.environ.get("NULLWAKE_CONTACT_LINKEDIN", ""),
+        contact_github=os.environ.get("NULLWAKE_CONTACT_GITHUB", ""),
     )
 
 

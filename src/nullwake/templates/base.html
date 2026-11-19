@@ -18,6 +18,7 @@
     <a href="/contracts" class="{{ 'on' if p.startswith('/contracts') or p.startswith('/checks') }}">Contracts</a>
     {% if user.can('admin') %}
     <a href="/audit" class="{{ 'on' if p.startswith('/audit') }}">Audit log</a>
+    <a href="/visitors" class="{{ 'on' if p.startswith('/visitors') }}">Visitors</a>
     <a href="/settings" class="{{ 'on' if p.startswith('/settings') }}">Settings</a>
     {% endif %}
   </nav>
@@ -28,6 +29,6 @@
 </header>
 {% endif %}
 <main class="wrap">{% block content %}{% endblock %}</main>
-<footer class="foot">Nullwake {{ version }} · <a href="/api/openapi.json">API reference (OpenAPI)</a></footer>
+<footer class="foot">Nullwake {{ version }} · <a href="/api/openapi.json">API reference (OpenAPI)</a>{% if settings.contact_github %} · <a href="{{ settings.contact_github }}" rel="noopener">Source on GitHub</a>{% endif %}{% if settings.contact_email %} · <a href="mailto:{{ settings.contact_email }}">{{ settings.contact_email }}</a>{% endif %}</footer>
 </body>
 </html>

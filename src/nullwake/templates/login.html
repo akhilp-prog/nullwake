@@ -17,5 +17,16 @@
     <p><code>{{ settings.demo_user }}</code> / <code>{{ settings.demo_password }}</code></p>
   </div>
   {% endif %}
+  {% if settings.contact_name and (settings.contact_email or settings.contact_linkedin or settings.contact_github) %}
+  <div class="contact">
+    <strong>Built by {{ settings.contact_name }}</strong>
+    <p>Questions, feedback or a pilot in your environment? Get in touch.</p>
+    <p class="links">
+      {% if settings.contact_email %}<a href="mailto:{{ settings.contact_email }}">{{ settings.contact_email }}</a>{% endif %}
+      {% if settings.contact_linkedin %}<a href="{{ settings.contact_linkedin }}" rel="noopener">LinkedIn</a>{% endif %}
+      {% if settings.contact_github %}<a href="{{ settings.contact_github }}" rel="noopener">GitHub</a>{% endif %}
+    </p>
+  </div>
+  {% endif %}
 </section>
 {% endblock %}
