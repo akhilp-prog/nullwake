@@ -119,7 +119,7 @@ Throttling uses the TCP peer address unless `NULLWAKE_CLIENT_IP_HEADER` is set. 
 `X-Nullwake-Client` from the real peer address. Only set this variable when Nullwake is reachable *exclusively*
 through a proxy that overwrites the header.
 
-## Known limitations (v0.1)
+## Known limitations (v0.6)
 
 - Local accounts only; OIDC SSO is on the roadmap. Put Nullwake behind your identity-aware proxy if SSO is required today.
 - Single organization per deployment (no multi-tenancy).

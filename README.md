@@ -69,7 +69,7 @@ flowchart LR
 ```
 
 More detail: [docs/architecture.md](docs/architecture.md) · [docs/security.md](docs/security.md) ·
-[docs/operations.md](docs/operations.md) · [decision records](docs/adr).
+[docs/operations.md](docs/operations.md) · [docs/pilot.md](docs/pilot.md) · [decision records](docs/adr).
 
 ## Quickstart (live demo on your machine)
 

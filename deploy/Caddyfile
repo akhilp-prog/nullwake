@@ -48,6 +48,7 @@
 	import access_log
 	encode zstd gzip
 	root * /srv/site
+	try_files {path} {path}.html
 	header {
 		Content-Security-Policy "default-src 'none'; style-src 'self'; font-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 		Strict-Transport-Security "max-age=31536000"

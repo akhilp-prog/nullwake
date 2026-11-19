@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Security and data handling: Nullwake</title>
+<meta name="description" content="What Nullwake reads from your warehouse, what leaves your network, how credentials are handled, and the read-only roles to create for Postgres, Snowflake and BigQuery.">
+<link rel="canonical" href="https://nullwake.si/security">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/site.css">
+<meta name="theme-color" content="#10162B">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://nullwake.si/security">
+<meta property="og:title" content="Nullwake security and data handling">
+<meta property="og:description" content="Read-only, aggregates only, credentials stay in your environment. The full picture for your security review.">
+<meta property="og:image" content="https://nullwake.si/img/og.png">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero hero-page">
+  <nav class="nav wrap" aria-label="Main">
+    <a class="logo" href="/" aria-label="Nullwake home"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="4"/><circle cx="16" cy="16" r="3.4" fill="currentColor"/></svg>nullwake</a>
+    <ul>
+      <li><a href="/#how">How it works</a></li>
+      <li><a href="/security" aria-current="page">Security</a></li>
+      <li><a href="/#pilot">Pilot</a></li>
+      <li><a href="/#about">About</a></li>
+    </ul>
+    <a class="nav-demo" href="https://app.nullwake.si/">Live demo</a>
+  </nav>
+  <div class="wrap page-head">
+    <h1>Security and data handling</h1>
+    <p class="lede">Everything your security team needs to review Nullwake: what it reads, what leaves your network, how credentials are kept and which warehouse permissions to grant. Updated November 2026 for version 0.6.2.</p>
+  </div>
+</header>
+
+<main id="main" class="doc wrap">
+
+<nav class="toc" aria-label="On this page">
+  <p>On this page</p>
+  <ol>
+    <li><a href="#summary">Summary</a></li>
+    <li><a href="#reads">What Nullwake reads</a></li>
+    <li><a href="#leaves">What leaves your network</a></li>
+    <li><a href="#access">Warehouse access</a></li>
+    <li><a href="#secrets">Credentials</a></li>
+    <li><a href="#app">Application security</a></li>
+    <li><a href="#limits">Known limitations</a></li>
+    <li><a href="#contact">Questions and reports</a></li>
+  </ol>
+</nav>
+
+<article class="doc-body">
+
+<section id="summary">
+  <h2>Summary</h2>
+  <ul class="ticks">
+    <li><b>You run it.</b> Nullwake is a set of containers on your own VM or container platform. There is no Nullwake cloud, no telemetry and no licence server.</li>
+    <li><b>Read-only.</b> It connects with a warehouse role that can only read the tables you list. On Postgres every session is also opened read-only with a statement timeout.</li>
+    <li><b>Aggregates, not rows.</b> Built-in checks read back counts, ages, null and duplicate counts, and column names and types. No result rows are copied.</li>
+    <li><b>Credentials stay with you.</b> Contracts name environment variables. A contract containing an inline secret is rejected.</li>
+    <li><b>You choose what goes out.</b> The only outbound traffic is to your warehouse, the alert channels you configure, and an optional heartbeat URL you set.</li>
+    <li><b>Open source.</b> The code is Apache 2.0 on <a href="https://github.com/akhilp-prog/nullwake">GitHub</a>, so you can read every line you deploy.</li>
+  </ul>
+</section>
+
+<section id="reads">
+  <h2>What Nullwake reads</h2>
+  <p>Each check generates one query and stores only its aggregate result.</p>
+  <div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th scope="col">Check</th><th scope="col">Reads back</th></tr></thead>
+    <tbody>
+      <tr><td>Freshness</td><td>The newest timestamp in one column, as an age in minutes</td></tr>
+      <tr><td>Volume</td><td>Row counts per time window</td></tr>
+      <tr><td>Schema</td><td>Column names, types and nullability from the information schema</td></tr>
+      <tr><td>Not null, unique</td><td>Counts of null values and of duplicate keys</td></tr>
+      <tr><td>Custom rule</td><td>One number returned by a single <code>SELECT</code> that your team writes and reviews</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note"><b>About custom rules.</b> A custom rule's number appears in its alert message, so review rule SQL in pull requests like any other code: it should return a count or another approved aggregate. Anyone with the editor role can add rules, so treat editors as trusted warehouse readers and keep the warehouse role's grants to the contracted tables.</p>
+  <p class="note"><b>Error messages are redacted.</b> Databases often quote the offending value in an error. Nullwake stores and alerts only the error class and SQLSTATE, for example <code>query failed: data exception (SQLSTATE 22P02)</code>. Full error text is not logged unless an operator turns it on while debugging.</p>
+</section>
+
+<section id="leaves">
+  <h2>What leaves your network</h2>
+  <p>Nullwake makes these outbound connections and no others.</p>
+  <div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th scope="col">Destination</th><th scope="col">What is sent</th><th scope="col">When</th></tr></thead>
+    <tbody>
+      <tr><td>Your warehouse</td><td>Generated read-only queries</td><td>Always. A hosted warehouse such as Snowflake or BigQuery sits outside your network.</td></tr>
+      <tr><td>Slack or your webhook</td><td>Check, contract and dataset names, the owner, severity, timestamps, a message with aggregate values, and a link to the incident</td><td>Only if you configure an alert channel</td></tr>
+      <tr><td>Heartbeat URL</td><td>A plain request with no content</td><td>Only if you set one</td></tr>
+    </tbody>
+  </table></div>
+  <p>An alert looks like <i>orders.freshness on analytics.fct_orders: data is 3 h old (limit 20 min)</i>. If table or owner names are themselves sensitive, send alerts to a webhook inside your network instead of Slack. Webhooks are signed with HMAC-SHA256 and a timestamp, so your receiver can reject forged or replayed calls.</p>
+</section>
+
+<section id="access">
+  <h2>Warehouse access</h2>
+  <p>Create a dedicated role that can read only the tables under contract. Where you can, grant individual tables rather than whole schemas, and give Nullwake its own small warehouse so its cost is visible and bounded.</p>
+
+  <h3>Postgres</h3>
+<pre class="code-block" tabindex="0"><code>CREATE ROLE nullwake_reader LOGIN PASSWORD '…';
+GRANT USAGE ON SCHEMA analytics TO nullwake_reader;
+GRANT SELECT ON ALL TABLES IN SCHEMA analytics TO nullwake_reader;
+ALTER ROLE nullwake_reader SET default_transaction_read_only = on;</code></pre>
+  <p>Nullwake also opens every session read-only and sets a statement timeout (60 seconds by default).</p>
+
+  <h3>Snowflake</h3>
+<pre class="code-block" tabindex="0"><code>CREATE ROLE NULLWAKE_READER;
+GRANT USAGE ON WAREHOUSE MONITORING_XS TO ROLE NULLWAKE_READER;
+GRANT USAGE ON DATABASE ANALYTICS TO ROLE NULLWAKE_READER;
+GRANT USAGE ON ALL SCHEMAS IN DATABASE ANALYTICS TO ROLE NULLWAKE_READER;
+GRANT SELECT ON ALL TABLES IN DATABASE ANALYTICS TO ROLE NULLWAKE_READER;
+CREATE USER NULLWAKE_SVC TYPE = SERVICE
+  DEFAULT_ROLE = NULLWAKE_READER RSA_PUBLIC_KEY = '…';
+GRANT ROLE NULLWAKE_READER TO USER NULLWAKE_SVC;</code></pre>
+  <p>Use key-pair authentication with a service user, so there is no password at all. Sessions carry a statement timeout and the query tag <code>nullwake</code>, so you can find and cost every Nullwake query in your query history. Snowflake has no read-only session mode, so the role is the boundary: never give Nullwake a role that can write.</p>
+
+  <h3>BigQuery</h3>
+  <p>A service account with <code>roles/bigquery.dataViewer</code> on the datasets and <code>roles/bigquery.jobUser</code> on the project. Every query carries a billing cap (10 GiB by default, adjustable) and the label <code>tool=nullwake</code>.</p>
+</section>
+
+<section id="secrets">
+  <h2>Credentials</h2>
+  <ul>
+    <li>Connection and alert settings only <i>name</i> environment variables, such as <code>dsnEnv: WAREHOUSE_DSN</code>. Settings that look like an inline password or key are rejected when the contract is applied.</li>
+    <li>Passwords, keys and webhook secrets live in your environment or secret manager, never in YAML or Git.</li>
+    <li>To rotate a credential, update the environment and restart the worker. Nothing in the database changes.</li>
+  </ul>
+</section>
+
+<section id="app">
+  <h2>Application security</h2>
+  <div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th scope="col">Area</th><th scope="col">How it works</th></tr></thead>
+    <tbody>
+      <tr><td>Sign-in</td><td>Passwords hashed with Argon2id. Sign-in is throttled to 10 failed attempts per address and per account every 15 minutes.</td></tr>
+      <tr><td>Sessions</td><td>Random 256-bit tokens, stored only as hashes, secure cookies, 8-hour lifetime, revoked when a password or role changes.</td></tr>
+      <tr><td>Roles</td><td>Viewer (read), editor (acknowledge, resolve, run and apply contracts) and admin (connections, alert channels, API tokens, audit log).</td></tr>
+      <tr><td>API tokens</td><td>Role-scoped, stored hashed, revocable, with last-used tracking.</td></tr>
+      <tr><td>Web interface</td><td>Ships no JavaScript and sends a strict Content-Security-Policy. Every form is protected against cross-site request forgery.</td></tr>
+      <tr><td>Audit log</td><td>Sign-ins, contract changes, acknowledgements, resolutions, notes, schema changes accepted, and token creation and revocation.</td></tr>
+      <tr><td>Containers</td><td>Run as a non-root user with a read-only filesystem, all Linux capabilities dropped, and privilege escalation disabled.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="limits">
+  <h2>Known limitations</h2>
+  <p>Stated plainly so they surface in your review rather than after it.</p>
+  <ul>
+    <li><b>No single sign-on yet.</b> Accounts are local. OIDC single sign-on is on the roadmap; until then you can put Nullwake behind your identity-aware proxy.</li>
+    <li><b>One organisation per deployment.</b> There is no multi-tenancy, which also means no data is shared between customers.</li>
+    <li><b>Single host as shipped.</b> The bundled setup has no high availability. Nullwake's own state is one Postgres database: back it up daily, and test a restore before production. Instructions are in the <a href="https://github.com/akhilp-prog/nullwake/blob/main/docs/operations.md">operations guide</a>.</li>
+    <li><b>Internal endpoints.</b> Metrics and readiness endpoints have no authentication and are blocked at the bundled proxy. Expose them only on internal networks.</li>
+    <li><b>Early product.</b> Nullwake is at version 0.6. Postgres is tested end to end, Snowflake is verified against a live account, and BigQuery is in beta.</li>
+  </ul>
+</section>
+
+<section id="contact">
+  <h2>Questions and reports</h2>
+  <p>For security questions, a call with your security team, or to report a vulnerability, email <a href="mailto:hello@nullwake.si?subject=Security">hello@nullwake.si</a>. The technical detail behind this page is in <a href="https://github.com/akhilp-prog/nullwake/blob/main/docs/security.md">docs/security.md</a>.</p>
+</section>
+
+</article>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <p class="foot-brand"><span class="logo"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="4"/><circle cx="16" cy="16" r="3.4" fill="currentColor"/></svg>nullwake</span> Data contracts that run inside your network.</p>
+    <p class="foot-links"><a href="mailto:hello@nullwake.si">hello@nullwake.si</a> <a href="/security">Security</a> <a href="https://app.nullwake.si/">Live demo</a> <a href="https://github.com/akhilp-prog/nullwake">GitHub</a></p>
+    <p class="privacy">This site sets no cookies, runs no JavaScript and loads nothing from other domains. Visits are logged with shortened IP addresses and deleted after 30 days.</p>
+  </div>
+</footer>
+</body>
+</html>
