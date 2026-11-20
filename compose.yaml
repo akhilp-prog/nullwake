@@ -3,7 +3,7 @@
 # Public demo with a simulated warehouse: docker compose --profile demo up -d --build
 x-app: &app
   build: .
-  image: nullwake:${NULLWAKE_VERSION:-0.6.5}
+  image: nullwake:${NULLWAKE_VERSION:-0.6.6}
   env_file: .env
   environment:
     NULLWAKE_DATABASE_URL: postgresql+psycopg://nullwake:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db/nullwake

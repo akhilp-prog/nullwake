@@ -180,7 +180,7 @@ def cmd_init(args) -> int:
     dbt_tables = []
     if args.dbt:
         try:
-            dbt_tables = select(load_manifest(Path(args.dbt), three_part=conn_def.type != "postgres"),
+            dbt_tables = select(load_manifest(Path(args.dbt), three_part=conn_def.type != "postgres", dialect=conn_def.type),
                                 args.select or [])
         except ManifestError as exc:
             print(f"error: {exc}", file=sys.stderr)

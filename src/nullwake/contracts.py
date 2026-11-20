@@ -133,6 +133,10 @@ def _env_name(spec: dict, key: str, where: str, required: bool = True) -> None:
         return
     if not isinstance(value, str) or not re.fullmatch(r"[A-Z_][A-Z0-9_]{0,127}", value):
         raise ContractError(f"{where}.{key}: must name an environment variable (UPPER_CASE)")
+    if value.startswith("NULLWAKE_"):
+        # Nullwake's own settings (its database URL, secret key) are never a warehouse or alert credential. Anyone
+        # who can apply YAML could otherwise point a connection at them.
+        raise ContractError(f"{where}.{key}: NULLWAKE_* variables hold Nullwake's own settings; use another name")
 
 
 def parse_connection(doc: dict, where: str) -> ConnectionDef:

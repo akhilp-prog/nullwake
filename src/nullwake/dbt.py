@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from .connectors import DIALECTS, ConnectorError
 from .init import Hints
 
 SIMPLE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -30,6 +32,7 @@ class DbtTable:
     dataset: str           # schema.table, or database.schema.table when the warehouse takes three parts
     tags: set[str]
     hints: Hints
+    sql_name: str = ""     # the dataset as the dialect writes it in SQL (validated, quoted where needed)
 
 
 def _max_age(freshness: dict | None) -> int | None:
@@ -51,8 +54,12 @@ def _owner(node: dict, groups: dict) -> str | None:
     return email if isinstance(email, str) and email else None
 
 
-def load_manifest(path: Path, three_part: bool) -> list[DbtTable]:
-    """Tables (models, snapshots, seeds, sources) with their hints. `three_part` adds the database to the dataset."""
+def load_manifest(path: Path, three_part: bool, dialect: str = "postgres") -> list[DbtTable]:
+    """Tables (models, snapshots, seeds, sources) with their hints. `three_part` adds the database to the dataset.
+
+    Names from the manifest are validated like any contract dataset; tables with names the warehouse dialect cannot
+    express safely are left out rather than written into SQL."""
+    quote = DIALECTS.get(dialect, DIALECTS["postgres"]).table
     try:
         manifest = json.loads(Path(path).read_text())
     except (OSError, json.JSONDecodeError) as exc:
@@ -62,14 +69,20 @@ def load_manifest(path: Path, three_part: bool) -> list[DbtTable]:
     nodes, sources, groups = manifest.get("nodes") or {}, manifest.get("sources") or {}, manifest.get("groups") or {}
 
     tables: dict[str, DbtTable] = {}
+    skipped_names: list[str] = []
 
     def add(uid: str, node: dict, identifier: str, hints: Hints) -> None:
         schema, database = node.get("schema"), node.get("database")
         if not schema or not identifier:
             return
         dataset = f"{database}.{schema}.{identifier}" if three_part and database else f"{schema}.{identifier}"
+        try:
+            sql_name = quote(dataset)
+        except ConnectorError:
+            skipped_names.append(dataset)
+            return
         tags = set(node.get("tags") or []) | set((node.get("config") or {}).get("tags") or [])
-        tables[uid] = DbtTable(uid, node.get("name") or identifier, dataset, tags, hints)
+        tables[uid] = DbtTable(uid, node.get("name") or identifier, dataset, tags, hints, sql_name)
 
     for uid, node in nodes.items():
         config = node.get("config") or {}
@@ -112,7 +125,7 @@ def load_manifest(path: Path, three_part: bool) -> list[DbtTable]:
             values = _literals(kwargs.get("values"), kwargs.get("quote", True))
             if values:
                 hints.checks.append((f"accepted_values_{column.lower()}"[:60],
-                                     f"select count(*) from {tables[target].dataset} where {column} is not null "
+                                     f"select count(*) from {tables[target].sql_name} where {column} is not null "
                                      f"and {column} not in ({values})",
                                      f"dbt accepted_values: {column} is one of the allowed values", {column}))
         elif test == "relationships" and isinstance(column, str) and SIMPLE.match(column):
@@ -121,11 +134,13 @@ def load_manifest(path: Path, three_part: bool) -> list[DbtTable]:
                            if d != target and d in tables), None)
             if parent and isinstance(field_, str) and SIMPLE.match(field_):
                 hints.checks.append((f"relationships_{column.lower()}"[:60],
-                                     f"select count(*) from {tables[target].dataset} c "
-                                     f"left join {tables[parent].dataset} p on c.{column} = p.{field_} "
+                                     f"select count(*) from {tables[target].sql_name} c "
+                                     f"left join {tables[parent].sql_name} p on c.{column} = p.{field_} "
                                      f"where c.{column} is not null and p.{field_} is null",
                                      f"dbt relationships: every {column} exists in {tables[parent].name}.{field_}",
                                      {column}))
+    for name in skipped_names:
+        print(f"skipped {name}: not a valid table name for this warehouse", file=sys.stderr)
     return list(tables.values())
 
 

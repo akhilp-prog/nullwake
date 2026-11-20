@@ -241,6 +241,17 @@ class PostgresConnector(Connector):
         except psycopg.Error as exc:
             raise ConnectorError(f"cannot connect to {name}: {exc.__class__.__name__}") from None
         self.conn.read_only = True
+        self._refuse_own_database()
+
+    def _refuse_own_database(self) -> None:
+        """A connection that lands in Nullwake's own metadata database (users, sessions, tokens) is refused, whatever
+        the DSN is called: counting queries there could leak account data to anyone who can apply contracts."""
+        found = self._run("SELECT to_regclass('api_tokens') IS NOT NULL AND to_regclass('sessions') IS NOT NULL "
+                          "AND to_regclass('alembic_version') IS NOT NULL")
+        if found and found[0][0]:
+            self.conn.close()
+            raise ConnectorError(f"cannot connect to {self.name}: it points at Nullwake's own database; "
+                                 "use a read-only role on the warehouse instead")
 
     def _run(self, sql: str, params: tuple = ()) -> list[tuple]:
         import psycopg

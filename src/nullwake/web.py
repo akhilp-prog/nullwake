@@ -63,6 +63,10 @@ class LoginRequired(Exception):
 def page_user(principal: Principal | None = Depends(optional_principal)) -> Principal:
     if principal is None:
         raise LoginRequired()
+    if principal.via == "token":
+        # Tokens are for automation on /api/v1. Keeping them off the web UI means a leaked token cannot mint a
+        # replacement token (settings) or read the audit log, so revoking it is enough.
+        raise HTTPException(403, "API tokens work on /api/v1 only; sign in to use the web interface")
     return principal
 
 

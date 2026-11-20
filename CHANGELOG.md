@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.6 (2026-11-20)
+
+Security review (access matrix, bandit, pip-audit, semgrep, abuse cases). Fixed:
+
+- API tokens are accepted on `/api/v1` only. Before, an admin token could also use the web UI, so a leaked token
+  could mint a replacement token that survived revoking the original.
+- Contracts can no longer reference `NULLWAKE_*` environment variables, and Postgres connections refuse to run
+  inside Nullwake's own metadata database. Before, someone allowed to apply YAML, with an environment variable
+  holding a DSN for that database, could run counting queries against users and sessions.
+- `nullwake init --dbt` validates table names from the manifest before writing them into SQL checks, and quotes
+  BigQuery names (project IDs with hyphens previously produced invalid SQL).
+
+Added `tests/test_access_matrix.py`: every route against anonymous, forged-token, viewer, editor and admin callers.
+
 ## 0.6.5 (2026-11-20)
 
 - `nullwake init --dbt` now carries over `accepted_values` (as a SQL check listing the allowed values, quotes escaped)

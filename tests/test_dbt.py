@@ -117,6 +117,27 @@ def test_dbt_manifest_drafts_contracts_that_pass(wh, tmp_path, capsys):
     assert "FAIL  fct_orders.check.accepted_values_status" in printed
 
 
+def test_dbt_names_are_validated_and_quoted(tmp_path, capsys):
+    manifest = json.loads(json.dumps(MANIFEST))
+    manifest["nodes"]["model.shop.evil"] = {
+        "resource_type": "model", "name": "evil", "schema": "nwtest; drop table x --", "database": "warehouse",
+        "config": {"enabled": True, "materialized": "table"}}
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(manifest))
+    names = {t.name for t in load_manifest(path, three_part=False)}
+    assert "evil" not in names and "fct_orders" in names
+    assert "skipped nwtest; drop table x --.evil" in capsys.readouterr().err
+    for node in manifest["nodes"].values():
+        node["database"] = "acme-prod"
+    del manifest["nodes"]["model.shop.evil"]
+    manifest["sources"]["source.shop.stripe.charges"]["database"] = "acme-prod"
+    path.write_text(json.dumps(manifest))
+    bq = {t.name: t for t in load_manifest(path, three_part=True, dialect="bigquery")}
+    sqls = [c[1] for c in bq["fct_orders"].hints.checks]
+    assert any("from `acme-prod.nwtest.fct_orders` c left join `acme-prod.nwtest.order_lines` p" in s for s in sqls)
+    assert bq["fct_orders"].dataset == "acme-prod.nwtest.fct_orders"
+
+
 def test_dbt_selection_and_errors(tmp_path, capsys):
     manifest = tmp_path / "manifest.json"
     manifest.write_text(json.dumps(MANIFEST))

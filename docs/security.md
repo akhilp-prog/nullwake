@@ -105,13 +105,26 @@ the label `tool=nullwake`.
 | Passwords | Argon2id (`argon2-cffi`), 14–256 characters, constant-time verification with a dummy hash for unknown users |
 | Sessions | 256-bit random tokens, stored as SHA-256 hashes, `HttpOnly; SameSite=Lax; Secure` (when served over HTTPS), 8 h lifetime, revoked on password/role change |
 | CSRF | per-session token on every form + exact `Origin` match on every cookie-authenticated write |
-| API tokens | `nw_<prefix>_<secret>`, stored hashed, role-scoped, revocable, last-used tracking |
+| API tokens | `nw_<prefix>_<secret>`, stored hashed, role-scoped, revocable, last-used tracking; accepted on `/api/v1` only, so a leaked token cannot open the web UI, read the audit log or mint a replacement token |
 | Authorization | viewer (read) · editor (acknowledge, resolve, run, apply contracts) · admin (connections, channels, tokens, audit) |
 | Brute force | 10 failed sign-ins per IP and per account per 15 minutes |
 | Headers | strict CSP (`default-src 'none'`, no scripts), `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: same-origin`, HSTS over HTTPS, `no-store` |
 | Webhooks | `X-Nullwake-Signature: sha256=HMAC(secret, "<timestamp>.<body>")` with `X-Nullwake-Timestamp`; receivers should reject timestamps older than 5 minutes |
 | Audit | sign-ins, config applies, acknowledgements, resolutions, notes, schema acceptance, token create/revoke |
+| Config isolation | contracts cannot reference `NULLWAKE_*` variables (Nullwake's own settings), and a Postgres connection that lands in Nullwake's own metadata database is refused, so applying YAML never exposes accounts or sessions |
 | Containers | non-root user, read-only root filesystem, all capabilities dropped, `no-new-privileges` |
+
+### How this is tested
+
+- **Access matrix** (`tests/test_access_matrix.py`): every route is called anonymously, with a forged token, and
+  as each role by session and by token; a route added without an access policy fails the build. It also covers
+  cross-site form posts (wrong `Origin`, missing CSRF token) and tokens on web pages.
+- **Static analysis**, run before each release: `bandit -r src`, `pip-audit` against the exact production
+  dependencies, and semgrep's Python, FastAPI, SQLAlchemy, secrets and Dockerfile rules. Last run (0.6.6): no
+  known-vulnerable dependencies; every SQL-construction flag reviewed (identifiers are validated against
+  `^[A-Za-z_][A-Za-z0-9_$]*$`, values are bound parameters, the statement timeout is an integer).
+- **Abuse cases**: a dbt manifest with an injected table name, a connection pointed at a secret-holding variable
+  (no value appears in errors), and a connection pointed at the metadata database.
 
 ### Client IP for throttling
 
