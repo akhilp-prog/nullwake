@@ -34,6 +34,18 @@ POLICY = {
 DENIED = {401, 403}
 
 
+def _dsn(url, dbname=None, user=None, password=None):
+    """A libpq DSN for the test server, the same way CI (TCP + password) and a local socket (trust) both reach it."""
+    host = url.query.get("host") or url.host or "localhost"
+    parts = [f"host={host}", f"dbname={dbname or url.database}", f"user={user or url.username}"]
+    pw = password if user else url.password
+    if pw:
+        parts.append(f"password={pw}")
+    if url.port:
+        parts.append(f"port={url.port}")
+    return " ".join(parts)
+
+
 def routes():
     """Every method+path the app serves, including routes from included routers."""
     out = []
@@ -173,8 +185,7 @@ def test_connections_into_nullwakes_own_database_are_refused(monkeypatch, migrat
     from .conftest import TEST_DB
     from sqlalchemy.engine import make_url
     url = make_url(TEST_DB)
-    monkeypatch.setenv("SNEAKY_DSN", f"host={url.query.get('host', 'localhost')} dbname={url.database} "
-                                     f"user={url.username}")
+    monkeypatch.setenv("SNEAKY_DSN", _dsn(url))
     with pytest.raises(ConnectorError, match="Nullwake's own database"):
         PostgresConnector("sneaky", {"dsnEnv": "SNEAKY_DSN"}, 10)
 
@@ -284,7 +295,7 @@ def test_runtime_database_role_is_least_privilege(migrated, monkeypatch, capsys)
     assert main(["migrate"]) == 0  # idempotent
     from sqlalchemy.engine import make_url
     url = make_url(TEST_DB)
-    dsn = f"host={url.query.get('host', 'localhost')} dbname={url.database} user=nw_app_test"
+    dsn = _dsn(url, user="nw_app_test", password="a-long-test-password-123")
     with psycopg.connect(dsn, autocommit=True) as conn:
         conn.execute("SELECT count(*) FROM users")
         conn.execute("SELECT version_num FROM alembic_version")
@@ -293,10 +304,11 @@ def test_runtime_database_role_is_least_privilege(migrated, monkeypatch, capsys)
             with pytest.raises(psycopg.Error):
                 conn.execute(denied)
     # Other databases on the server: whatever PUBLIC can reach, the runtime role reaches no further.
-    with psycopg.connect(f"host={url.query.get('host', 'localhost')} dbname=warehouse user=postgres", autocommit=True) as admin:
+    with psycopg.connect(_dsn(url, dbname="warehouse"), autocommit=True) as admin:
         admin.execute("REVOKE CONNECT ON DATABASE warehouse FROM PUBLIC")
         try:
             with pytest.raises(psycopg.Error):
-                psycopg.connect(f"host={url.query.get('host', 'localhost')} dbname=warehouse user=nw_app_test").close()
+                psycopg.connect(_dsn(url, dbname="warehouse", user="nw_app_test",
+                                     password="a-long-test-password-123")).close()
         finally:
             admin.execute("GRANT CONNECT ON DATABASE warehouse TO PUBLIC")
