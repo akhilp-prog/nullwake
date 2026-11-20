@@ -103,8 +103,10 @@ main > .sec:first-child{border-top:0}
 .lhead{font-size:.88rem;font-weight:620;color:var(--muted);padding-block:.75rem}
 .lrow span:last-child{font-weight:560}
 
-#how{grid-template-columns:minmax(0,1fr) minmax(0,1.1fr)}
-#how .sec-head{grid-column:1;grid-row:1;position:static}
+#how,#dbt{grid-template-columns:minmax(0,1fr) minmax(0,1.1fr)}
+#how .sec-head,#dbt .sec-head{grid-column:1;grid-row:1;position:static}
+#dbt .ctas{grid-column:1;grid-row:3;margin-top:-.5rem}
+.code .ok{color:var(--pass);font-weight:500}.code .bad{color:var(--fail);font-weight:500}.code .dim{color:var(--moon-dim)}
 .how{display:contents}
 .steps{grid-column:1;grid-row:2}
 .code{grid-column:2;grid-row:1 / 3;align-self:start}
@@ -199,7 +201,8 @@ main > .sec:first-child{border-top:0}
   .log{border-left:0;padding-left:0;border-top:1px solid var(--night-line);padding-top:1.5rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:1rem 2rem}
 }
 @media (max-width:900px){
-  .sec,#how{grid-template-columns:1fr}
+  .sec,#how,#dbt{grid-template-columns:1fr}
+  #dbt .ctas{grid-row:auto;margin-top:0}
   .sec-head{position:static}
   .hero-copy{grid-template-columns:1fr}
   .code{position:static;grid-column:1;grid-row:auto}

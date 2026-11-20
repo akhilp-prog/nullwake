@@ -25,6 +25,7 @@
     <a class="logo" href="/" aria-label="Nullwake home"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="4"/><circle cx="16" cy="16" r="3.4" fill="currentColor"/></svg>nullwake</a>
     <ul>
       <li><a href="#how">How it works</a></li>
+      <li><a href="#dbt">dbt</a></li>
       <li><a href="#security">Security</a></li>
       <li><a href="#pilot">Pilot</a></li>
       <li><a href="#about">About</a></li>
@@ -381,6 +382,35 @@
     <li><h3>It watches itself</h3><p>A health endpoint for your uptime monitor turns red when checks are overdue, workers are silent or alerts are stuck.</p></li>
     <li><h3>History is never deleted</h3><p>Removing a check retires it. Its runs, incidents and audit trail stay, and re-adding it brings them back.</p></li>
   </ul>
+</section>
+
+<section class="sec wrap" id="dbt" aria-labelledby="dbt-h">
+  <div class="sec-head">
+    <h2 id="dbt-h">Already on dbt? Send me your manifest</h2>
+    <p>Your dbt tests already describe what good data looks like. Nullwake turns them into checks that run on a schedule and alert when the data breaks, not only when someone runs a build.</p>
+  </div>
+  <div class="how">
+    <ol class="steps">
+      <li><h3>Run <code>dbt parse</code></h3><p>It writes <code>target/manifest.json</code>. The file holds your model code, column names and test definitions. It contains no rows of data.</p></li>
+      <li><h3>Email it to me</h3><p>Send it to <a href="mailto:hello@nullwake.si?subject=dbt%20manifest">hello@nullwake.si</a>. If you would rather not share it, run <code>nullwake init --dbt</code> yourself: it is open source and runs on your machine.</p></li>
+      <li><h3>Get contracts back within a day</h3><p><code>unique</code> and <code>not_null</code> become column rules, <code>accepted_values</code> and <code>relationships</code> become SQL checks, source freshness becomes the freshness check and <code>meta.owner</code> becomes the owner. I note anything that needs your decision.</p></li>
+    </ol>
+    <div class="code" role="region" aria-label="nullwake init on dbt Labs' jaffle_shop">
+      <div class="code-bar">Tested on dbt Labs’ jaffle_shop, with one bad order inserted</div>
+<pre tabindex="0"><code><span class="k">$</span> nullwake init conn.yaml --dbt target/manifest.json
+<span class="dim">8 contract(s) drafted</span>
+
+<span class="k">$</span> nullwake check conn.yaml contracts/
+<span class="ok">PASS</span>  orders.unique.order_id
+<span class="ok">PASS</span>  orders.not_null.customer_id
+<span class="ok">PASS</span>  orders.schema
+<span class="bad">FAIL</span>  orders.check.relationships_customer_id
+<span class="dim">      1 order points to a customer that doesn’t exist</span>
+<span class="bad">FAIL</span>  orders.check.accepted_values_status
+<span class="dim">      1 order has a status outside the allowed list</span></code></pre>
+    </div>
+  </div>
+  <p class="ctas"><a class="btn btn-primary" href="mailto:hello@nullwake.si?subject=dbt%20manifest">Send your manifest</a></p>
 </section>
 
 <section class="pilot" id="pilot" aria-labelledby="pilot-h">
