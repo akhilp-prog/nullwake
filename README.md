@@ -85,6 +85,20 @@ docker compose exec web nullwake user you@example.com --role admin
 open https://localhost          # Caddy issues a local certificate for "localhost"
 ```
 
+## Start from your existing tables
+
+`nullwake init` reads your table definitions and drafts one contract per table, so you start from something that
+already runs instead of a blank file:
+
+```sh
+nullwake init connection.yaml --schema analytics --owner data-team@acme.com   # writes contracts/*.yaml
+nullwake check connection.yaml contracts/                                       # try them against the warehouse
+```
+
+Columns, types, NOT NULL and declared primary keys come from the warehouse. A load-time column (`_loaded_at`,
+`ingested_at`, `created_at`, ...) becomes the freshness and volume check. Limits only your team knows, such as how late
+is too late, are marked TODO with conservative defaults.
+
 ## A data contract
 
 ```yaml
@@ -153,7 +167,7 @@ export NULLWAKE_TEST_WAREHOUSE_DSN="host=localhost dbname=warehouse user=postgre
 pytest
 ```
 
-The suite (91 tests) runs against real Postgres: checks against live tables, read-only and timeout enforcement,
+The suite (96 tests) runs against real Postgres: checks against live tables, read-only and timeout enforcement,
 incident lifecycle, `SKIP LOCKED` claiming under contention, signed webhook delivery and retry, RBAC, CSRF/origin
 checks, throttling, and the CLI's CI exit codes.
 

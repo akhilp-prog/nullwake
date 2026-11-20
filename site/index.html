@@ -272,7 +272,7 @@
   </div>
   <div class="how">
     <ol class="steps">
-      <li><h3>Write the contract</h3><p>One YAML file per table: who owns it, how fresh it must be, its columns, its keys and any rules of your own.</p></li>
+      <li><h3>Write the contract</h3><p>One YAML file per table: who owns it, how fresh it must be, its columns, its keys and any rules of your own. <code>nullwake init</code> drafts them from your existing tables, so you start from contracts that already run.</p></li>
       <li><h3>Apply it from CI</h3><p><code>nullwake apply contracts/</code> loads the contracts. <code>nullwake check</code> can also run every contract straight after <code>dbt build</code> and fail the pipeline, with no server needed.</p></li>
       <li><h3>Checks run on schedule</h3><p>Workers run each check on its own interval through a read-only warehouse role, with a statement timeout on every query.</p></li>
       <li><h3>Incidents open and close themselves</h3><p>A failing check opens one incident, not a stream of alerts. The owning team hears about it in Slack or through a signed webhook, can acknowledge it and add notes, and the incident closes when the check passes again.</p></li>

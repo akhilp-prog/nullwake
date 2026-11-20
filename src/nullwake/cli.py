@@ -152,6 +152,47 @@ def cmd_check(args) -> int:
     return 1 if failed else 0
 
 
+def cmd_init(args) -> int:
+    """Draft starter contracts from the warehouse's own table definitions."""
+    from .connectors import ConnectorError, open_connector
+    from .contracts import ContractError, load_bundle
+    from .init import run_init
+    if not args.schema and not args.table:
+        print("error: give --schema SCHEMA and/or --table SCHEMA.TABLE", file=sys.stderr)
+        return 2
+    try:
+        bundle = load_bundle([args.connection_file])
+    except ContractError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    conns = [c for c in bundle.connections if not args.connection or c.name == args.connection]
+    if len(conns) != 1:
+        names = ", ".join(c.name for c in bundle.connections) or "none"
+        print(f"error: expected exactly one Connection in {args.connection_file} (found: {names}); "
+              "pick one with --connection NAME", file=sys.stderr)
+        return 2
+    conn_def = conns[0]
+    out_dir = Path(args.out)
+    try:
+        with open_connector(conn_def.name, conn_def.type, conn_def.spec, args.timeout) as conn:
+            written, skipped = run_init(conn, conn_def.name, args.schema or [], args.table or [], out_dir,
+                                        args.owner, args.force, args.interval)
+    except ConnectorError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    for path, draft in written:
+        print(f"wrote {path}  ({draft.dataset})")
+        for note in draft.notes:
+            print(f"      note: {note}")
+    for msg in skipped:
+        print(f"skipped {msg}")
+    if not written:
+        return 1
+    print(f"\n{len(written)} contract(s) drafted. Review the TODOs, then try them against the warehouse:\n"
+          f"  nullwake check {args.connection_file} {out_dir}/")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="nullwake", description="Data reliability that runs inside your network.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -185,6 +226,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--format", choices=("text", "json"), default="text")
     p.add_argument("--timeout", type=int, default=120)
     p.set_defaults(fn=cmd_check)
+    p = sub.add_parser("init", help="draft contracts from the warehouse's table definitions")
+    p.add_argument("connection_file", help="YAML file with the Connection to read from")
+    p.add_argument("--connection", help="connection name, if the file holds more than one")
+    p.add_argument("--schema", action="append", help="draft a contract for every table in this schema (repeatable)")
+    p.add_argument("--table", action="append", help="draft a contract for this table, e.g. analytics.orders (repeatable)")
+    p.add_argument("--out", default="contracts", help="directory to write contracts to (default: contracts)")
+    p.add_argument("--owner", default="data-team@example.com", help="owner written into each contract")
+    p.add_argument("--interval", type=int, default=60, help="check interval in minutes (default: 60)")
+    p.add_argument("--force", action="store_true", help="overwrite existing contract files")
+    p.add_argument("--timeout", type=int, default=120)
+    p.set_defaults(fn=cmd_init)
     args = parser.parse_args(argv)
     return args.fn(args)
 

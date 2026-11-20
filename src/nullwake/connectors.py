@@ -211,6 +211,14 @@ class Connector:
     def columns(self, dataset: str) -> list[ColumnInfo]:
         raise NotImplementedError
 
+    def tables(self, schema: str) -> list[str]:
+        """Tables and views in one schema (Postgres schema, Snowflake schema or database.schema, BigQuery dataset)."""
+        raise NotImplementedError
+
+    def primary_key(self, dataset: str) -> list[str]:
+        """Declared primary-key columns, or [] if none is declared or the warehouse cannot tell us."""
+        return []
+
     def close(self) -> None:
         pass
 
@@ -266,6 +274,17 @@ class PostgresConnector(Connector):
             "WHERE table_schema = %s AND table_name = %s ORDER BY ordinal_position",
             (schema, table))
         return [ColumnInfo(r[0], self.dialect.normalize_type(r[1]), bool(r[2])) for r in rows]
+
+    def tables(self, schema: str) -> list[str]:
+        rows = self._run("SELECT table_name FROM information_schema.tables WHERE table_schema = %s "
+                         "AND table_type IN ('BASE TABLE', 'VIEW') ORDER BY table_name", (ident(schema).lower(),))
+        return [r[0] for r in rows]
+
+    def primary_key(self, dataset: str) -> list[str]:
+        found = self._run("SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid "
+                          "AND a.attnum = ANY(i.indkey) WHERE i.indisprimary AND i.indrelid = to_regclass(%s) "
+                          "ORDER BY array_position(i.indkey, a.attnum)", (".".join(split_dataset(dataset, 2)),))
+        return [r[0] for r in found]
 
     def close(self) -> None:
         self.conn.close()
@@ -331,6 +350,21 @@ class SnowflakeConnector(Connector):
                          (ident(schema), ident(table)))
         return [ColumnInfo(r[0].lower(), self.dialect.normalize_type(r[1]), bool(r[2])) for r in rows]
 
+    def tables(self, schema: str) -> list[str]:
+        parts = split_dataset(schema, 2)
+        db = parts[0] if len(parts) == 2 else self.spec.get("database", "")
+        prefix = f"{ident(db)}." if db else ""
+        rows = self._run(f"SELECT table_name FROM {prefix}information_schema.tables WHERE table_schema = UPPER(%s) "
+                         "AND table_type IN ('BASE TABLE', 'VIEW') ORDER BY table_name", (parts[-1],))
+        return [r[0] for r in rows]
+
+    def primary_key(self, dataset: str) -> list[str]:
+        try:  # Snowflake records (but does not enforce) primary keys; SHOW returns column_name at index 4
+            rows = self._run(f"SHOW PRIMARY KEYS IN TABLE {'.'.join(split_dataset(dataset))}")
+            return [str(r[4]).lower() for r in sorted(rows, key=lambda r: r[5])]
+        except ConnectorError:
+            return []
+
     def close(self) -> None:
         self.conn.close()
 
@@ -383,6 +417,38 @@ class BigQueryConnector(Connector):  # pragma: no cover - requires a GCP project
             maximum_bytes_billed=int(self.spec.get("maximumBytesBilled", 10 * 1024**3)))
         rows = self.client.query(sql, job_config=config).result(timeout=self.timeout)
         return [ColumnInfo(r[0], self.dialect.normalize_type(r[1]), bool(r[2])) for r in rows]
+
+    def _rows(self, sql: str, **params: str) -> list[tuple]:
+        config = self.bq.QueryJobConfig(
+            query_parameters=[self.bq.ScalarQueryParameter(k, "STRING", v) for k, v in params.items()],
+            labels={"tool": "nullwake"}, maximum_bytes_billed=int(self.spec.get("maximumBytesBilled", 10 * 1024**3)))
+        try:
+            return [tuple(r.values()) for r in self.client.query(sql, job_config=config).result(timeout=self.timeout)]
+        except Exception as exc:
+            raise redacted(self.name, exc) from None
+
+    def _project_dataset(self, schema: str) -> tuple[str, str]:
+        raw = schema.split(".")
+        if len(raw) == 2:
+            return bq_project(raw[0]), ident(raw[1])
+        return bq_project(self.spec.get("project", "")), ident(schema)
+
+    def tables(self, schema: str) -> list[str]:
+        project, ds = self._project_dataset(schema)
+        return [r[0] for r in self._rows(f"SELECT table_name FROM `{project}.{ds}.INFORMATION_SCHEMA.TABLES` "
+                                         "WHERE table_type IN ('BASE TABLE', 'VIEW') ORDER BY table_name")]
+
+    def primary_key(self, dataset: str) -> list[str]:
+        raw = dataset.split(".")
+        project, ds = self._project_dataset(".".join(raw[:-1]))
+        try:
+            rows = self._rows(f"SELECT k.column_name FROM `{project}.{ds}.INFORMATION_SCHEMA.KEY_COLUMN_USAGE` k "
+                              f"JOIN `{project}.{ds}.INFORMATION_SCHEMA.TABLE_CONSTRAINTS` c USING (constraint_name) "
+                              "WHERE c.constraint_type = 'PRIMARY KEY' AND k.table_name = @t "
+                              "ORDER BY k.ordinal_position", t=ident(raw[-1]))
+        except ConnectorError:
+            return []
+        return [r[0] for r in rows]
 
 
 CONNECTORS = {"postgres": PostgresConnector, "snowflake": SnowflakeConnector, "bigquery": BigQueryConnector}

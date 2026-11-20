@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.3 (2026-11-20)
+
+- `nullwake init`: drafts one contract per table from the warehouse's own definitions (columns, types, NOT NULL,
+  declared primary keys) for a whole schema (`--schema`) or chosen tables (`--table`), on Postgres, Snowflake and
+  BigQuery. It picks a load-time column for freshness and volume (preferring `_loaded_at`-style columns over
+  `created_at`, and skipping volume for `updated_at`), marks limits only the team can set as TODO with conservative
+  defaults, and never overwrites a file without `--force`. Drafted contracts pass `nullwake check` unchanged.
+- Fix: the dead man's switch skipped its first ping on a host that had been up for under a minute.
+- BigQuery verified against a live project (read-only service account); test script in `examples/`.
+
 ## 0.6.2 (2026-11-19)
 
 - Product website in `site/`: a static page with no JavaScript, cookies or third-party requests, served by the bundled
