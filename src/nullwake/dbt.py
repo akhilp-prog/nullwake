@@ -8,11 +8,13 @@ only lists the columns someone documented.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from .init import Hints
 
+SIMPLE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 PERIOD_MINUTES = {"minute": 1, "hour": 60, "day": 1440}
 TABLE_TYPES = {"model", "snapshot", "seed"}
 
@@ -77,7 +79,8 @@ def load_manifest(path: Path, three_part: bool) -> list[DbtTable]:
         key = config.get("unique_key")
         key = [key] if isinstance(key, str) else [k for k in key if isinstance(k, str)] if isinstance(key, list) else []
         add(uid, node, node.get("alias") or node.get("name"),
-            Hints(owner=_owner(node, groups), unique_key=[k.lower() for k in key if "," not in k and " " not in k]))
+            Hints(owner=_owner(node, groups), unique_key=[k.lower() for k in key if "," not in k and " " not in k],
+                  static=node.get("resource_type") == "seed"))
     for uid, src in sources.items():
         if (src.get("config") or {}).get("enabled") is False:
             continue
@@ -105,7 +108,44 @@ def load_manifest(path: Path, three_part: bool) -> list[DbtTable]:
             hints.unique.add(column.strip('"`').lower())
         elif test == "unique_combination_of_columns" and isinstance(kwargs.get("combination_of_columns"), list):
             hints.unique_key = [str(c).lower() for c in kwargs["combination_of_columns"]]
+        elif test == "accepted_values" and isinstance(column, str) and SIMPLE.match(column):
+            values = _literals(kwargs.get("values"), kwargs.get("quote", True))
+            if values:
+                hints.checks.append((f"accepted_values_{column.lower()}"[:60],
+                                     f"select count(*) from {tables[target].dataset} where {column} is not null "
+                                     f"and {column} not in ({values})",
+                                     f"dbt accepted_values: {column} is one of the allowed values", {column}))
+        elif test == "relationships" and isinstance(column, str) and SIMPLE.match(column):
+            field_ = kwargs.get("field")
+            parent = next((d for d in (node.get("depends_on") or {}).get("nodes") or []
+                           if d != target and d in tables), None)
+            if parent and isinstance(field_, str) and SIMPLE.match(field_):
+                hints.checks.append((f"relationships_{column.lower()}"[:60],
+                                     f"select count(*) from {tables[target].dataset} c "
+                                     f"left join {tables[parent].dataset} p on c.{column} = p.{field_} "
+                                     f"where c.{column} is not null and p.{field_} is null",
+                                     f"dbt relationships: every {column} exists in {tables[parent].name}.{field_}",
+                                     {column}))
     return list(tables.values())
+
+
+def _literals(values, quote) -> str | None:
+    """SQL list of accepted values, or None if any value is not a plain string or number."""
+    if not isinstance(values, list) or not values or len(values) > 200:
+        return None
+    out = []
+    for v in values:
+        if isinstance(v, bool):
+            return None
+        if isinstance(v, (int, float)):
+            out.append(repr(v))
+        elif isinstance(v, str) and quote is not False:
+            out.append("'" + v.replace("'", "''") + "'")
+        elif isinstance(v, str) and re.fullmatch(r"-?\d+(\.\d+)?", v):
+            out.append(v)
+        else:
+            return None
+    return ", ".join(out)
 
 
 def select(tables: list[DbtTable], selectors: list[str]) -> list[DbtTable]:

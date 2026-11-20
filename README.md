@@ -106,11 +106,13 @@ dbt parse                                                                       
 nullwake init connection.yaml --dbt target/manifest.json --select tag:finance
 ```
 
-`unique` and `not_null` tests become column rules, `unique_combination_of_columns` and an incremental model's
+`unique` and `not_null` tests become column rules, `accepted_values` and `relationships` tests become SQL checks, `unique_combination_of_columns` and an incremental model's
 `unique_key` become the contract's key, a source's `loaded_at_field` and `freshness.error_after` become the freshness
 check (no TODO), and `meta.owner` or the model's group owner becomes the contract owner. Columns and types still come
 from the warehouse, so undocumented columns are covered too. `--select` takes a model or source table name,
-`tag:NAME` or `source:NAME`; filtered tests (`where:`) are left out because a contract checks the whole table.
+`tag:NAME` or `source:NAME`; filtered tests (`where:`) are left out because a contract checks the whole table, and
+seeds get no freshness or volume check because they never receive new rows. Tried on dbt Labs' `jaffle_shop`: every
+carried-over test passes on the built project and fails when a bad row is inserted.
 
 ## A data contract
 

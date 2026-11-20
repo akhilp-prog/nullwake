@@ -7,6 +7,7 @@ anyone.
 """
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -35,6 +36,8 @@ class Hints:
     freshness_column: str | None = None
     max_age_minutes: int | None = None
     description: str | None = None
+    static: bool = False                                    # dbt seed: loaded once, so no freshness or volume
+    checks: list[tuple[str, str, str, set[str]]] = field(default_factory=list)  # name, sql, description, columns
 
 
 @dataclass
@@ -125,14 +128,16 @@ def draft_contract(connection: str, dataset: str, columns: list[ColumnInfo], pri
         notes.append("no declared primary key: add uniqueKey if rows should be unique")
         out.append("  # uniqueKey: [id]  # TODO: no primary key is declared; list the columns that identify a row")
     ts, why = pick_timestamp(columns)
-    if h.freshness_column and h.freshness_column.lower() in known:
+    if h.static:
+        ts, why = None, f"{h.source} seed, static data loaded by `dbt seed`"
+    elif h.freshness_column and h.freshness_column.lower() in known:
         ts = next(c for c in columns if c.name.lower() == h.freshness_column.lower())
         why = f"loaded_at_field in {h.source}"
     age = h.max_age_minutes or 1440
     todo = "" if h.max_age_minutes else "  # TODO: how late is too late?"
     if ts is None:
         notes.append(f"no freshness check: {why}")
-        out.append("  # freshness: no timestamp or date column found, so there is no freshness check")
+        out.append(f"  # freshness: none ({why})")
     else:
         if h.max_age_minutes:
             note = f"  # {h.source} freshness error_after; column: {why}" if "loaded_at" in why else \
@@ -146,6 +151,16 @@ def draft_contract(connection: str, dataset: str, columns: list[ColumnInfo], pri
         else:
             out.append(f"  volume: {{column: {_q(ts.name)}, windowHours: 24}}"
                        "  # rows per day compared with the previous 7 days")
+    usable = []
+    for cname, sql, desc, cols in h.checks:
+        if {c.lower() for c in cols} <= known:
+            usable.append((cname, sql, desc))
+        else:
+            notes.append(f"{h.source} test {cname} skipped: it uses a column the warehouse table does not have")
+    if usable:
+        out.append(f"  checks:  # from {h.source} tests; each query counts bad rows and must return 0")
+        for cname, sql, desc in usable:
+            out.append(f"    - {{name: {cname}, sql: {json.dumps(sql)}, description: {json.dumps(desc)}}}")
     return Draft(name=name, dataset=dataset, yaml="\n".join(out) + "\n", notes=notes)
 
 

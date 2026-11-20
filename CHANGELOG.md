@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.5 (2026-11-20)
+
+- `nullwake init --dbt` now carries over `accepted_values` (as a SQL check listing the allowed values, quotes escaped)
+  and `relationships` (a left-join orphan check against the referenced model), and gives seeds no freshness or volume
+  check. Verified on dbt Labs' jaffle_shop built with dbt-postgres: 8 contracts, all dbt tests carried over, and an
+  orphaned, wrongly-statused order is caught.
+
 ## 0.6.4 (2026-11-20)
 
 - `nullwake init --dbt target/manifest.json`: drafts contracts for dbt models, snapshots, seeds and sources. dbt's
