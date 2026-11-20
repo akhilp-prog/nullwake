@@ -286,16 +286,17 @@ def visitors_page(request: Request, days: int = 30, user: Principal = Depends(pa
 
 @router.post("/settings/tokens")
 def create_token(request: Request, csrf: str = Form(""), name: str = Form(..., min_length=1, max_length=80),
-                 role: str = Form("viewer"), db: Session = Depends(get_db), user: Principal = Depends(page_user),
+                 role: str = Form("viewer"), days: int = Form(90), db: Session = Depends(get_db),
+                 user: Principal = Depends(page_user),
                  settings: Settings = Depends(settings_dep)):
     verify_mutation(request, user, settings, csrf)
     if not user.can("admin"):
         raise HTTPException(403, "requires the admin role")
     try:
-        row, raw = create_api_token(db, name.strip(), role, user.email)
+        row, raw = create_api_token(db, name.strip(), role, user.email, days)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from None
-    engine.audit(db, user.email, "token.create", f"token/{row.prefix}", role=role, name=row.name)
+    engine.audit(db, user.email, "token.create", f"token/{row.prefix}", role=role, name=row.name, days=days)
     return render(request, "settings.html", user,
                   connections=db.scalars(select(Connection).order_by(Connection.name)).all(),
                   channels=db.scalars(select(AlertChannel).order_by(AlertChannel.name)).all(),

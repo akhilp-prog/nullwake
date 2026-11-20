@@ -5,7 +5,8 @@ All commands run from the deployment directory on the host.
 ## First deployment
 
 ```sh
-cp .env.example .env               # set NULLWAKE_DOMAIN, POSTGRES_PASSWORD, warehouse/alert env vars
+cp .env.example .env               # set NULLWAKE_DOMAIN, POSTGRES_PASSWORD, NULLWAKE_APP_DB_PASSWORD
+cp worker.env.example worker.env   # warehouse and alert credentials (worker only)
 docker compose config --quiet      # validate
 docker compose up -d --build
 docker compose ps                  # migrate exits 0; web is healthy
@@ -61,6 +62,22 @@ docker compose exec web curl -fsS localhost:8000/readyz
 ```
 
 Migrations are forward-only in production; take a backup first.
+
+### Upgrading to 0.7
+
+0.7 gives each service only the credentials it uses (see `docs/security.md`, "What each service receives"). Before
+`docker compose up -d`:
+
+```sh
+umask 077
+echo "NULLWAKE_APP_DB_PASSWORD=$(openssl rand -hex 24)" >> .env
+cp worker.env.example worker.env       # then move warehouse and alert variables from .env into worker.env
+```
+
+`migrate` creates the `nullwake_app` role; web and worker then connect with it. Warehouse and alert variables left
+in `.env` are no longer passed to any container, so checks and alerts fail until they are in `worker.env`.
+Custom SQL written through the API now needs the admin role (`NULLWAKE_SQL_AUTHOR_ROLE`), `prune` needs admin, and
+existing API tokens expire 90 days after the upgrade.
 
 ## Backups
 

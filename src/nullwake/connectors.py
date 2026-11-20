@@ -30,11 +30,27 @@ def raw_errors_logged() -> bool:
     return os.environ.get("NULLWAKE_LOG_WAREHOUSE_ERRORS", "").lower() in ("1", "true", "yes")
 
 
+def _warn_unverified_tls(name: str, dsn: str) -> None:
+    """A warehouse reached over a network should prove its identity: sslmode=require encrypts but does not check the
+    certificate or host name. Local sockets, loopback and single-label hosts (a container network) are exempt."""
+    try:
+        from psycopg.conninfo import conninfo_to_dict
+        info = conninfo_to_dict(dsn)
+    except Exception:
+        return
+    host = str(info.get("host") or "")
+    remote = host and not host.startswith("/") and "." in host and host not in ("127.0.0.1", "::1") \
+        and not host.startswith("localhost")
+    if remote and info.get("sslmode") != "verify-full":
+        log.warning("connection %s reaches %s without sslmode=verify-full; the server's certificate and host name "
+                    "are not verified (set sslmode=verify-full and sslrootcert)", name, host)
+
+
 def redacted(name: str, exc: BaseException) -> "ConnectorError":
     """Warehouse error text can quote data (e.g. `invalid input syntax for type integer: "4111-..."`). Keep only the
     error class and SQLSTATE in anything that is stored or alerted on; the full text goes to this host's log only."""
     code = getattr(exc, "sqlstate", None) or getattr(exc, "sqlstate_code", None) or getattr(exc, "code", None)
-    code = code if isinstance(code, str) else ""
+    code = code if isinstance(code, str) and re.fullmatch(r"[0-9A-Z]{5}", code) else ""
     if raw_errors_logged():
         log.warning("warehouse error on %s: %s", name, str(exc).strip()[:2000])
     else:
@@ -242,6 +258,7 @@ class PostgresConnector(Connector):
             raise ConnectorError(f"cannot connect to {name}: {exc.__class__.__name__}") from None
         self.conn.read_only = True
         self._refuse_own_database()
+        _warn_unverified_tls(name, dsn)
 
     def _refuse_own_database(self) -> None:
         """A connection that lands in Nullwake's own metadata database (users, sessions, tokens) is refused, whatever
@@ -253,19 +270,25 @@ class PostgresConnector(Connector):
             raise ConnectorError(f"cannot connect to {self.name}: it points at Nullwake's own database; "
                                  "use a read-only role on the warehouse instead")
 
-    def _run(self, sql: str, params: tuple = ()) -> list[tuple]:
+    def _run(self, sql: str, params: tuple = (), max_rows: int | None = None) -> list[tuple]:
         import psycopg
         try:
-            with self.conn.transaction(), self.conn.cursor() as cur:
-                cur.execute(f"SET LOCAL statement_timeout = {self.timeout * 1000}")
-                cur.execute("SET LOCAL TIME ZONE 'UTC'")
-                cur.execute(sql, params)
-                return cur.fetchall()
+            with self.conn.transaction():
+                with self.conn.cursor() as cur:
+                    cur.execute(f"SET LOCAL statement_timeout = {self.timeout * 1000}")
+                    cur.execute("SET LOCAL TIME ZONE 'UTC'")
+                    if not max_rows:
+                        cur.execute(sql, params)
+                        return cur.fetchall()
+                # A server-side cursor: Postgres sends only the rows asked for, however many the query produces.
+                with self.conn.cursor(name="nullwake_bounded") as cur:
+                    cur.execute(sql, params or None)
+                    return cur.fetchmany(max_rows)
         except psycopg.Error as exc:
             raise redacted(self.name, exc) from None
 
     def row(self, sql: str) -> tuple:
-        rows = self._run(sql)
+        rows = self._run(sql, max_rows=2)  # two is enough to tell "one row" from "more than one"
         if len(rows) != 1:
             raise ConnectorError(f"expected one row, got {len(rows)}")
         return rows[0]
@@ -336,16 +359,16 @@ class SnowflakeConnector(Connector):
                         str(exc).strip()[:2000] if raw_errors_logged() else exc.__class__.__name__)
             raise ConnectorError(f"cannot connect to {name}: {exc.__class__.__name__}") from None
 
-    def _run(self, sql: str, params: tuple | None = None) -> list[tuple]:
+    def _run(self, sql: str, params: tuple | None = None, max_rows: int | None = None) -> list[tuple]:
         try:
             with self.conn.cursor() as cur:
                 cur.execute(sql, params)
-                return [tuple(r) for r in cur.fetchall()]
+                return [tuple(r) for r in (cur.fetchmany(max_rows) if max_rows else cur.fetchall())]
         except Exception as exc:
             raise redacted(self.name, exc) from None
 
     def row(self, sql: str) -> tuple:
-        rows = self._run(sql)
+        rows = self._run(sql, max_rows=2)  # two is enough to tell "one row" from "more than one"
         if len(rows) != 1:
             raise ConnectorError(f"expected one row, got {len(rows)}")
         return rows[0]
@@ -400,7 +423,7 @@ class BigQueryConnector(Connector):  # pragma: no cover - requires a GCP project
         job = None
         try:
             job = self.client.query(sql, job_config=config)
-            rows = list(job.result(timeout=self.timeout))
+            rows = list(job.result(timeout=self.timeout, max_results=2))
         except Exception as exc:
             if job is not None and not job.done():
                 try:  # result(timeout=) only stops waiting; cancel so the job stops using slots and bytes

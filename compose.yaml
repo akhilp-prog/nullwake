@@ -1,15 +1,37 @@
 # Nullwake single-host deployment: Caddy (TLS) -> web (FastAPI) + worker -> Postgres.
 # Usage: cp .env.example .env && edit; docker compose up -d --build
 # Public demo with a simulated warehouse: docker compose --profile demo up -d --build
+# Secrets and settings reach only the services that use them:
+#   .env        read by Compose itself (interpolation only); no container receives the file as a whole
+#   worker.env  warehouse and alert-channel credentials, given to the worker alone (create it, even if empty)
+# web and worker connect to the metadata database as nullwake_app, a role that can read and write rows but cannot
+# change the schema; only the one-shot migrate service uses the owner account. See docs/security.md.
+x-settings: &settings
+  NULLWAKE_PUBLIC_URL: https://${NULLWAKE_DOMAIN:?set NULLWAKE_DOMAIN in .env}
+  NULLWAKE_CLIENT_IP_HEADER: X-Nullwake-Client
+  NULLWAKE_SESSION_HOURS: ${NULLWAKE_SESSION_HOURS:-8}
+  NULLWAKE_RETENTION_DAYS: ${NULLWAKE_RETENTION_DAYS:-30}
+  NULLWAKE_QUERY_TIMEOUT_SECONDS: ${NULLWAKE_QUERY_TIMEOUT_SECONDS:-60}
+  NULLWAKE_WORKER_POLL_SECONDS: ${NULLWAKE_WORKER_POLL_SECONDS:-5}
+  NULLWAKE_WORKER_BATCH_SIZE: ${NULLWAKE_WORKER_BATCH_SIZE:-10}
+  NULLWAKE_WORKER_LEASE_SECONDS: ${NULLWAKE_WORKER_LEASE_SECONDS:-0}
+  NULLWAKE_WATCHDOG_GRACE_SECONDS: ${NULLWAKE_WATCHDOG_GRACE_SECONDS:-300}
+  NULLWAKE_LOG_LEVEL: ${NULLWAKE_LOG_LEVEL:-INFO}
+  NULLWAKE_LOG_WAREHOUSE_ERRORS: ${NULLWAKE_LOG_WAREHOUSE_ERRORS:-false}
+  NULLWAKE_SQL_AUTHOR_ROLE: ${NULLWAKE_SQL_AUTHOR_ROLE:-admin}
+  NULLWAKE_TOKEN_DAYS: ${NULLWAKE_TOKEN_DAYS:-90}
+  NULLWAKE_DEADMAN_URL: ${NULLWAKE_DEADMAN_URL:-}
+  NULLWAKE_DEMO_MODE: ${NULLWAKE_DEMO_MODE:-false}
+  NULLWAKE_DEMO_USER: ${NULLWAKE_DEMO_USER:-}
+  NULLWAKE_DEMO_PASSWORD: ${NULLWAKE_DEMO_PASSWORD:-}
+  NULLWAKE_CONTACT_NAME: ${NULLWAKE_CONTACT_NAME:-}
+  NULLWAKE_CONTACT_EMAIL: ${NULLWAKE_CONTACT_EMAIL:-}
+  NULLWAKE_CONTACT_LINKEDIN: ${NULLWAKE_CONTACT_LINKEDIN:-}
+  NULLWAKE_CONTACT_GITHUB: ${NULLWAKE_CONTACT_GITHUB:-}
+
 x-app: &app
   build: .
-  image: nullwake:${NULLWAKE_VERSION:-0.6.6}
-  env_file: .env
-  environment:
-    NULLWAKE_DATABASE_URL: postgresql+psycopg://nullwake:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db/nullwake
-    NULLWAKE_PUBLIC_URL: https://${NULLWAKE_DOMAIN:?set NULLWAKE_DOMAIN in .env}
-    NULLWAKE_CLIENT_IP_HEADER: X-Nullwake-Client
-    DEMO_WAREHOUSE_DSN: host=db dbname=warehouse user=nullwake_reader password=${DEMO_READER_PASSWORD:-unused}
+  image: nullwake:${NULLWAKE_VERSION:-0.7.0}
   restart: unless-stopped
   read_only: true
   tmpfs: [/tmp]
@@ -36,6 +58,10 @@ services:
   migrate:
     <<: *app
     command: ["nullwake", "migrate"]
+    environment:
+      <<: *settings
+      NULLWAKE_DATABASE_URL: postgresql+psycopg://nullwake:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db/nullwake
+      NULLWAKE_APP_DB_PASSWORD: ${NULLWAKE_APP_DB_PASSWORD:?set NULLWAKE_APP_DB_PASSWORD in .env (openssl rand -hex 24)}
     restart: "no"
     depends_on:
       db: {condition: service_healthy}
@@ -43,6 +69,9 @@ services:
   web:
     <<: *app
     command: ["nullwake", "serve", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    environment:
+      <<: *settings
+      NULLWAKE_DATABASE_URL: postgresql+psycopg://nullwake_app:${NULLWAKE_APP_DB_PASSWORD:?set NULLWAKE_APP_DB_PASSWORD in .env}@db/nullwake
     volumes:
       - access_logs:/var/log/nullwake:ro   # the proxy's privacy-filtered access log, for the admin Visitors page
     depends_on:
@@ -51,6 +80,11 @@ services:
   worker:
     <<: *app
     command: ["nullwake", "worker"]
+    env_file: worker.env
+    environment:
+      <<: *settings
+      NULLWAKE_DATABASE_URL: postgresql+psycopg://nullwake_app:${NULLWAKE_APP_DB_PASSWORD:?set NULLWAKE_APP_DB_PASSWORD in .env}@db/nullwake
+      DEMO_WAREHOUSE_DSN: host=db dbname=warehouse user=nullwake_reader password=${DEMO_READER_PASSWORD:-unused}
     # Unhealthy if this container's worker has not reported in. A stuck loop also exits by itself (stall watchdog),
     # so `restart: unless-stopped` brings it back. NULLWAKE_DEADMAN_URL adds an outbound ping for an external monitor.
     healthcheck:
@@ -85,7 +119,10 @@ services:
     profiles: ["demo"]
     command: ["sh", "/app/demo/bootstrap.sh"]
     healthcheck: {disable: true}
+    # The public demo's simulator writes the demo warehouse and seeds demo contracts, so it uses the owner account.
+    # It is not part of a customer deployment.
     environment:
+      <<: *settings
       NULLWAKE_DATABASE_URL: postgresql+psycopg://nullwake:${POSTGRES_PASSWORD}@db/nullwake
       DEMO_WAREHOUSE_ADMIN_DSN: host=db dbname=warehouse user=nullwake password=${POSTGRES_PASSWORD}
       DEMO_WAREHOUSE_DSN: host=db dbname=warehouse user=nullwake_reader password=${DEMO_READER_PASSWORD}

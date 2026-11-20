@@ -16,9 +16,24 @@ def _alembic_config():
 
 
 def cmd_migrate(args) -> int:
+    import os
+
     from alembic import command
     command.upgrade(_alembic_config(), "head")
     print("database is at the latest migration")
+    password = os.environ.get("NULLWAKE_APP_DB_PASSWORD", "")
+    if password:
+        from sqlalchemy import create_engine
+
+        from .config import get_settings
+        from .dbroles import ensure_app_role
+        role = os.environ.get("NULLWAKE_APP_DB_USER", "nullwake_app")
+        engine = create_engine(get_settings().database_url)
+        try:
+            ensure_app_role(engine, role, password)
+        finally:
+            engine.dispose()
+        print(f"runtime role {role} can read and write rows only (no schema changes, no superuser)")
     return 0
 
 

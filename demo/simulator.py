@@ -72,7 +72,9 @@ def init(conn: psycopg.Connection) -> None:
         exists = conn.execute("SELECT 1 FROM pg_roles WHERE rolname = 'nullwake_reader'").fetchone()
         verb = "ALTER" if exists else "CREATE"
         conn.execute(f"{verb} ROLE nullwake_reader LOGIN PASSWORD {sql.Literal(reader_pw).as_string(conn)}")
-        conn.execute("GRANT USAGE ON SCHEMA analytics TO nullwake_reader; "
+        conn.execute("REVOKE CONNECT ON DATABASE warehouse FROM PUBLIC; "
+                     "GRANT CONNECT ON DATABASE warehouse TO nullwake_reader; "
+                     "GRANT USAGE ON SCHEMA analytics TO nullwake_reader; "
                      "GRANT SELECT ON ALL TABLES IN SCHEMA analytics TO nullwake_reader; "
                      "ALTER DEFAULT PRIVILEGES IN SCHEMA analytics GRANT SELECT ON TABLES TO nullwake_reader; "
                      "REVOKE SELECT ON analytics.sim_state FROM nullwake_reader;")

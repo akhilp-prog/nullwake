@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.7.0 (2026-11-20)
+
+Least privilege, after an external security review. Breaking for existing deployments: see docs/operations.md,
+"Upgrading to 0.7".
+
+- **Custom SQL is its own permission.** New or changed custom SQL checks (or moving one to another connection)
+  through the API need the admin role by default (`NULLWAKE_SQL_AUTHOR_ROLE`). Editors can still re-apply approved
+  SQL, so CI with an editor token keeps working. Dry runs list the SQL changes.
+- **`prune` needs admin**, and a dry run lists exactly which contracts it would retire.
+- **Per-service credentials.** web and worker connect as `nullwake_app` (rows only: no DDL, no superuser, no other
+  databases), provisioned by `nullwake migrate`; only migrate uses the owner account. No container receives `.env`;
+  warehouse and alert credentials live in `worker.env`, which only the worker gets.
+- **API tokens expire** (30, 90 or 365 days; existing tokens get 90 days) and are revoked when their creator is
+  demoted below the token's role.
+- One-row checks fetch at most two rows (a server-side cursor on Postgres, bounded fetches on Snowflake and BigQuery),
+  so a query returning millions of rows no longer loads them into the worker.
+- Only well-formed SQLSTATE codes are copied into stored error text.
+- The worker warns about remote Postgres DSNs without `sslmode=verify-full`.
+- `docs/security.md`: what each service receives, warehouse transport, and what is stored, who sees it and for how long.
+
 ## 0.6.6 (2026-11-20)
 
 Security review (access matrix, bandit, pip-audit, semgrep, abuse cases). Fixed:

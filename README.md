@@ -78,7 +78,8 @@ stalled loader, renamed column, duplicate load, null burst, volume drop, negativ
 watch incidents open, alert and resolve.
 
 ```sh
-cp .env.example .env            # set POSTGRES_PASSWORD, DEMO_READER_PASSWORD, NULLWAKE_DOMAIN=localhost
+cp .env.example .env            # set POSTGRES_PASSWORD, NULLWAKE_APP_DB_PASSWORD, DEMO_READER_PASSWORD, NULLWAKE_DOMAIN=localhost
+cp worker.env.example worker.env
 sed -i 's/^NULLWAKE_DEMO_MODE=.*/NULLWAKE_DEMO_MODE=true/' .env
 docker compose --profile demo up -d --build
 docker compose exec web nullwake user you@example.com --role admin
@@ -182,7 +183,7 @@ export NULLWAKE_TEST_WAREHOUSE_DSN="host=localhost dbname=warehouse user=postgre
 pytest
 ```
 
-The suite (159 tests) runs against real Postgres: checks against live tables, read-only and timeout enforcement,
+The suite (165 tests) runs against real Postgres: checks against live tables, read-only and timeout enforcement,
 incident lifecycle, `SKIP LOCKED` claiming under contention, signed webhook delivery and retry, RBAC, CSRF/origin
 checks, throttling, and the CLI's CI exit codes.
 

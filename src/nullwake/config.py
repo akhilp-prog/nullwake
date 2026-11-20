@@ -34,6 +34,8 @@ class Settings:
     contact_email: str = ""
     contact_linkedin: str = ""
     contact_github: str = ""
+    sql_author_role: str = "admin"
+    token_days: int = 90
     extra: dict = field(default_factory=dict)
 
     @property
@@ -80,7 +82,16 @@ def load_settings() -> Settings:
         contact_email=os.environ.get("NULLWAKE_CONTACT_EMAIL", ""),
         contact_linkedin=os.environ.get("NULLWAKE_CONTACT_LINKEDIN", ""),
         contact_github=os.environ.get("NULLWAKE_CONTACT_GITHUB", ""),
+        sql_author_role=_role(os.environ.get("NULLWAKE_SQL_AUTHOR_ROLE", "admin")),
+        token_days=int(os.environ.get("NULLWAKE_TOKEN_DAYS", "90")),
     )
+
+
+def _role(value: str) -> str:
+    value = value.strip().lower()
+    if value not in ("editor", "admin"):
+        raise RuntimeError("NULLWAKE_SQL_AUTHOR_ROLE must be editor or admin")
+    return value
 
 
 @lru_cache(maxsize=1)

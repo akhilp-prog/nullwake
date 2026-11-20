@@ -177,3 +177,126 @@ def test_connections_into_nullwakes_own_database_are_refused(monkeypatch, migrat
                                      f"user={url.username}")
     with pytest.raises(ConnectorError, match="Nullwake's own database"):
         PostgresConnector("sneaky", {"dsnEnv": "SNEAKY_DSN"}, 10)
+
+
+def _apply(client, token, body, query=""):
+    return client.post(f"/api/v1/config/apply{query}", content=body,
+                       headers={"authorization": f"Bearer {token}", "content-type": "application/yaml"})
+
+
+def test_editors_cannot_write_custom_sql(client, ids, db):
+    """Custom SQL reads whatever the warehouse role can read, so writing it is a separate permission (admin)."""
+    from sqlalchemy import select
+
+    from nullwake.models import Monitor
+
+    from .conftest import contract_yaml
+    _, editor = create_api_token(db, "ed", "editor", "t")
+    _, admin = create_api_token(db, "ad", "admin", "t")
+    db.commit()
+    probe = contract_yaml("checks: [{name: peek, sql: 'select count(*) from secrets.salaries'}]", name="daily_orders")
+    r = _apply(client, editor, probe)
+    assert r.status_code == 403 and "custom SQL" in r.json()["error"]
+    assert _apply(client, editor, probe, "?dry_run=true").status_code == 403
+    assert db.scalar(select(Monitor).where(Monitor.name == "daily_orders.check.peek")) is None
+    assert _apply(client, admin, probe).status_code == 200                # an admin writes it
+    assert _apply(client, editor, probe).status_code == 200               # CI re-applies it unchanged
+    changed = probe.replace("secrets.salaries", "secrets.bonuses")
+    assert _apply(client, editor, changed).status_code == 403             # but cannot change it
+    # Non-SQL edits to the same contract stay open to editors.
+    assert _apply(client, editor, probe.replace("owner: team@example.com", "owner: other@example.com")).status_code == 200
+
+
+def test_prune_requires_admin_and_changes_nothing_when_refused(client, ids, db, seeded):
+    from sqlalchemy import select
+
+    from nullwake.models import Contract, Incident
+
+    from .conftest import contract_yaml
+    _, editor = create_api_token(db, "ed", "editor", "t")
+    _, admin = create_api_token(db, "ad", "admin", "t")
+    db.commit()
+    other_team = contract_yaml("freshness: {column: loaded_at, maxAgeMinutes: 60}", name="team_b_only")
+    r = _apply(client, editor, other_team, "?prune=true")
+    assert r.status_code == 403 and "prune" in r.json()["error"]
+    db.expire_all()
+    assert db.scalar(select(Contract).where(Contract.name == "orders")).retired_at is None
+    assert db.get(Incident, seeded.id).status != "resolved"
+    dry = _apply(client, admin, other_team, "?prune=true&dry_run=true").json()
+    assert dry["wouldRetire"] == ["orders"]
+
+
+def test_tokens_expire_and_demotion_revokes_higher_tokens(client, db, seeded):
+    from datetime import timedelta
+
+    from nullwake.models import ApiToken, utcnow
+    from nullwake.security import token_principal, upsert_user
+
+    from .test_web import PASSWORD
+    row, raw = create_api_token(db, "short", "viewer", "t", days=30)
+    db.commit()
+    assert 29 <= (row.expires_at - utcnow()).days <= 30 and token_principal(db, raw) is not None
+    row.expires_at = utcnow() - timedelta(seconds=1)
+    db.commit()
+    assert client.get("/api/v1/status", headers={"authorization": f"Bearer {raw}"}).status_code == 401
+    with pytest.raises(ValueError):
+        create_api_token(db, "forever", "viewer", "t", days=10_000)
+
+    _, admin_tok = create_api_token(db, "a", "admin", "admin@x.io")
+    _, viewer_tok = create_api_token(db, "v", "viewer", "admin@x.io")
+    db.commit()
+    upsert_user(db, "admin@x.io", "editor", PASSWORD)  # demoted
+    db.commit()
+    assert token_principal(db, admin_tok) is None and token_principal(db, viewer_tok) is not None
+
+
+def test_only_well_formed_error_codes_reach_stored_text():
+    from nullwake.connectors import redacted
+
+    class Fake(Exception):
+        sqlstate = "22P02"
+
+    class Forged(Exception):
+        sqlstate = "card 4111-1111-1111-1111"
+
+    assert "22P02" in str(redacted("wh", Fake("x")))
+    assert "4111" not in str(redacted("wh", Forged("x")))
+
+
+def test_one_row_checks_do_not_fetch_huge_results(wh):
+    from nullwake.connectors import ConnectorError, PostgresConnector
+    with PostgresConnector("t", {"dsnEnv": "TEST_WAREHOUSE_DSN"}, 30) as conn:
+        with pytest.raises(ConnectorError, match="expected one row, got 2"):
+            conn.row("select g from generate_series(1, 5000000) g")
+
+
+def test_runtime_database_role_is_least_privilege(migrated, monkeypatch, capsys):
+    """`nullwake migrate` provisions the role web and worker use: rows yes; schema, migrations, other DBs no."""
+    import psycopg
+
+    from nullwake.cli import main
+
+    from .conftest import TEST_DB
+    monkeypatch.setenv("NULLWAKE_DATABASE_URL", TEST_DB)
+    monkeypatch.setenv("NULLWAKE_APP_DB_USER", "nw_app_test")
+    monkeypatch.setenv("NULLWAKE_APP_DB_PASSWORD", "a-long-test-password-123")
+    assert main(["migrate"]) == 0 and "nw_app_test can read and write rows only" in capsys.readouterr().out
+    assert main(["migrate"]) == 0  # idempotent
+    from sqlalchemy.engine import make_url
+    url = make_url(TEST_DB)
+    dsn = f"host={url.query.get('host', 'localhost')} dbname={url.database} user=nw_app_test"
+    with psycopg.connect(dsn, autocommit=True) as conn:
+        conn.execute("SELECT count(*) FROM users")
+        conn.execute("SELECT version_num FROM alembic_version")
+        for denied in ("CREATE TABLE evil (x int)", "UPDATE alembic_version SET version_num = version_num",
+                       "ALTER TABLE users ADD COLUMN evil int", "CREATE ROLE evil", "DROP TABLE users"):
+            with pytest.raises(psycopg.Error):
+                conn.execute(denied)
+    # Other databases on the server: whatever PUBLIC can reach, the runtime role reaches no further.
+    with psycopg.connect(f"host={url.query.get('host', 'localhost')} dbname=warehouse user=postgres", autocommit=True) as admin:
+        admin.execute("REVOKE CONNECT ON DATABASE warehouse FROM PUBLIC")
+        try:
+            with pytest.raises(psycopg.Error):
+                psycopg.connect(f"host={url.query.get('host', 'localhost')} dbname=warehouse user=nw_app_test").close()
+        finally:
+            admin.execute("GRANT CONNECT ON DATABASE warehouse TO PUBLIC")

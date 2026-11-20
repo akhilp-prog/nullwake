@@ -48,7 +48,7 @@ def login(client, email):
 def test_health_ready_metrics_and_headers(client, seeded):
     assert client.get("/healthz").text == "ok\n"
     ready = client.get("/readyz").json()
-    assert ready["ready"] is True and ready["migration"] == "0004"
+    assert ready["ready"] is True and ready["migration"] == "0005"
     metrics = client.get("/metrics").text
     assert 'nullwake_incidents_active{severity="critical"} 1.0' in metrics
     assert 'nullwake_checks{status="fail"} 1.0' in metrics
@@ -140,12 +140,17 @@ def test_api_tokens_and_rbac(client, seeded, db):
 
 def test_api_config_apply(client, seeded, db):
     _, editor = create_api_token(db, "ci", "editor", "t")
+    _, admin = create_api_token(db, "sec", "admin", "t")
     db.commit()
-    h = {"authorization": f"Bearer {editor}", "content-type": "application/yaml"}
+    h = {"authorization": f"Bearer {admin}", "content-type": "application/yaml"}
     good = contract_yaml("checks: [{name: c1, sql: 'select 0'}]", name="refunds")
     dry = client.post("/api/v1/config/apply?dry_run=true", content=good, headers=h)
-    assert dry.status_code == 200 and dry.json() == {"valid": True, "contracts": ["refunds"], "checks": 1}
+    assert dry.status_code == 200 and dry.json() == {"valid": True, "contracts": ["refunds"], "checks": 1,
+                                                     "sqlChanges": ["refunds.check.c1"], "wouldRetire": []}
     assert client.post("/api/v1/config/apply", content=good, headers=h).json()["created"] == ["contract/refunds"]
+    h = {"authorization": f"Bearer {editor}", "content-type": "application/yaml"}
+    # The same SQL re-applied by CI with an editor token is fine; new SQL is not (see test_access_matrix).
+    assert client.post("/api/v1/config/apply", content=good, headers=h).status_code == 200
     bad = client.post("/api/v1/config/apply", content=good.replace("select 0", "drop table x"), headers=h)
     assert bad.status_code == 422 and "single SELECT" in bad.json()["error"]
     conn = client.post("/api/v1/config/apply", content=CONNECTION_YAML, headers=h)

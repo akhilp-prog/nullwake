@@ -130,6 +130,22 @@ def acknowledge(incident_id: int, request: Request, body: Note = Body(default_fa
     return _incident(i)
 
 
+def _sql_changes(db: Session, bundle) -> list[str]:
+    """Custom SQL checks that are new, changed, or moved to another connection compared with what is stored.
+
+    Re-applying unchanged SQL (the usual CI run) needs no extra permission; writing new SQL does."""
+    out = []
+    for c in bundle.contracts:
+        for m in c.monitors:
+            if m.kind != "assertion":
+                continue
+            row = db.scalar(select(Monitor).where(Monitor.name == m.name))
+            if row is None or row.retired_at is not None or row.kind != "assertion" \
+                    or (row.params or {}).get("sql") != m.params.get("sql") or row.connection_name != m.connection:
+                out.append(m.name)
+    return out
+
+
 @router.post("/config/apply")
 async def apply_config(request: Request, dry_run: bool = False, prune: bool = False,
                        db: Session = Depends(get_db), principal: Principal = Depends(require("editor")),
@@ -151,9 +167,19 @@ async def apply_config(request: Request, dry_run: bool = False, prune: bool = Fa
             raise HTTPException(422, str(exc).replace(str(path), "body")) from None
     if (bundle.connections or bundle.channels) and not principal.can("admin"):
         raise HTTPException(403, "changing connections or alert channels requires the admin role")
+    if prune and not principal.can("admin"):
+        raise HTTPException(403, "prune retires every contract missing from the bundle and requires the admin role")
+    sql_changes = _sql_changes(db, bundle)
+    if sql_changes and not principal.can(settings.sql_author_role):
+        raise HTTPException(403, f"new or changed custom SQL ({', '.join(sql_changes[:5])}) requires the "
+                                 f"{settings.sql_author_role} role: custom SQL can read anything the connection's "
+                                 "warehouse role can read")
     if dry_run:
+        retire = sorted(set(db.scalars(select(Contract.name).where(Contract.retired_at.is_(None))))
+                        - {c.name for c in bundle.contracts}) if prune else []
         return {"valid": True, "contracts": [c.name for c in bundle.contracts],
-                "checks": sum(len(c.monitors) for c in bundle.contracts)}
+                "checks": sum(len(c.monitors) for c in bundle.contracts), "sqlChanges": sql_changes,
+                "wouldRetire": retire}
     try:
         summary = engine.apply_bundle(db, bundle, principal.email, prune=prune)
     except ValueError as exc:

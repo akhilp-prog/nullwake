@@ -10,7 +10,7 @@ from datetime import timedelta
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session as DBSession
 
 from .models import ROLES, ApiToken, LoginAttempt, Session, User, utcnow
@@ -60,6 +60,11 @@ def upsert_user(db: DBSession, email: str, role: str, password: str, name: str =
         if name:
             user.name = name
         db.execute(delete(Session).where(Session.user_id == user.id))
+        # Tokens this person created may not outrank them: a demoted admin's admin tokens are revoked with the change.
+        above = [r for r in ROLES if ROLE_RANK[r] > ROLE_RANK[role]]
+        if above:
+            db.execute(update(ApiToken).where(ApiToken.created_by == email, ApiToken.role.in_(above),
+                                              ApiToken.revoked_at.is_(None)).values(revoked_at=utcnow()))
     db.flush()
     return user
 
@@ -110,13 +115,19 @@ def session_principal(db: DBSession, token: str | None) -> Principal | None:
     return Principal(row.user.email, row.user.role, row.csrf, "session", row.user.id)
 
 
-def create_api_token(db: DBSession, name: str, role: str, created_by: str) -> tuple[ApiToken, str]:
+MAX_TOKEN_DAYS = 365
+
+
+def create_api_token(db: DBSession, name: str, role: str, created_by: str, days: int = 90) -> tuple[ApiToken, str]:
     if role not in ROLES:
         raise ValueError(f"role must be one of {', '.join(ROLES)}")
+    if not 1 <= int(days) <= MAX_TOKEN_DAYS:
+        raise ValueError(f"token lifetime must be 1 to {MAX_TOKEN_DAYS} days")
     prefix = secrets.token_hex(4)
     secret = secrets.token_urlsafe(32)
     raw = f"nw_{prefix}_{secret}"
-    row = ApiToken(name=name[:80], prefix=prefix, token_hash=token_hash(raw), role=role, created_by=created_by)
+    row = ApiToken(name=name[:80], prefix=prefix, token_hash=token_hash(raw), role=role, created_by=created_by,
+                   expires_at=utcnow() + timedelta(days=int(days)))
     db.add(row)
     db.flush()
     return row, raw
@@ -126,7 +137,8 @@ def token_principal(db: DBSession, raw: str) -> Principal | None:
     m = re.fullmatch(r"nw_([0-9a-f]{8})_[A-Za-z0-9_-]{20,}", raw or "")
     if not m:
         return None
-    row = db.scalar(select(ApiToken).where(ApiToken.prefix == m[1], ApiToken.revoked_at.is_(None)))
+    row = db.scalar(select(ApiToken).where(ApiToken.prefix == m[1], ApiToken.revoked_at.is_(None),
+                                           (ApiToken.expires_at.is_(None)) | (ApiToken.expires_at > utcnow())))
     if row is None or not hmac.compare_digest(row.token_hash, token_hash(raw)):
         return None
     row.last_used_at = utcnow()
