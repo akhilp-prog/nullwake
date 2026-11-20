@@ -25,6 +25,19 @@ UPDATED = re.compile(r"(^|_)(updated|modified|changed)(_at|_time|_ts|_on)?$")
 
 
 @dataclass
+class Hints:
+    """What another tool (dbt) already knows about a table, used to sharpen a draft."""
+    source: str = "dbt"                                     # named in comments so reviewers know where it came from
+    owner: str | None = None
+    not_null: set[str] = field(default_factory=set)        # lower-case column names
+    unique: set[str] = field(default_factory=set)
+    unique_key: list[str] = field(default_factory=list)
+    freshness_column: str | None = None
+    max_age_minutes: int | None = None
+    description: str | None = None
+
+
+@dataclass
 class Draft:
     name: str
     dataset: str
@@ -66,17 +79,23 @@ def _q(value: str) -> str:
 
 
 def draft_contract(connection: str, dataset: str, columns: list[ColumnInfo], primary_key: list[str], owner: str,
-                   taken: set[str], interval_minutes: int = 60) -> Draft:
+                   taken: set[str], interval_minutes: int = 60, hints: Hints | None = None,
+                   name_hint: str | None = None) -> Draft:
+    h = hints or Hints(source="")
     table = dataset.split(".")[-1]
-    name = contract_name(table, taken)
+    name = contract_name(name_hint or table, taken)
     notes: list[str] = []
+    if h.owner:
+        owner = h.owner
+    origin = f"the table definition and {h.source}" if h.source else "the table definition"
     out = [
-        "# Drafted by `nullwake init` from the table definition. Review it, set the TODOs, then apply it.",
+        f"# Drafted by `nullwake init` from {origin}. Review it, set the TODOs, then apply it.",
         "apiVersion: nullwake/v1",
         "kind: DataContract",
         "metadata:",
         f"  name: {name}",
-        f"  owner: {_q(owner)}" + ("  # TODO: the team or person who fixes this table" if "example" in owner else ""),
+        f"  owner: {_q(owner)}" + (f"  # from {h.source} meta" if h.owner else
+                                   "  # TODO: the team or person who fixes this table" if "example" in owner else ""),
         "spec:",
         f"  connection: {_q(connection)}",
         f"  dataset: {_q(dataset)}",
@@ -85,22 +104,43 @@ def draft_contract(connection: str, dataset: str, columns: list[ColumnInfo], pri
         "    allowAdditionalColumns: true  # new columns are fine; renamed, dropped or retyped ones fail",
         "    columns:",
     ]
+    known = {c.name.lower() for c in columns}
     for c in columns:
-        nn = ", nullable: false" if not c.nullable else ""
-        out.append(f"      - {{name: {_q(c.name)}, type: {_q(c.type)}{nn}}}")
+        lname = c.name.lower()
+        nn = ", nullable: false" if not c.nullable or lname in h.not_null else ""
+        uq = ", unique: true" if lname in h.unique else ""
+        why = [w for w, hit in (("not_null", c.nullable and lname in h.not_null), ("unique", bool(uq))) if hit]
+        tail = f"  # {h.source} test: {', '.join(why)}" if why else ""
+        out.append(f"      - {{name: {_q(c.name)}, type: {_q(c.type)}{nn}{uq}}}{tail}")
+    for missing in sorted((h.not_null | h.unique) - known):
+        notes.append(f"{h.source} tests column {missing}, which the warehouse table does not have")
+    key = [k for k in h.unique_key if k.lower() in known]
     if primary_key:
         out.append(f"  uniqueKey: [{', '.join(_q(k) for k in primary_key)}]  # declared primary key")
+    elif key:
+        out.append(f"  uniqueKey: [{', '.join(_q(k) for k in key)}]  # from {h.source}")
+    elif h.unique:
+        pass  # a single-column unique test is already on the column
     else:
         notes.append("no declared primary key: add uniqueKey if rows should be unique")
         out.append("  # uniqueKey: [id]  # TODO: no primary key is declared; list the columns that identify a row")
     ts, why = pick_timestamp(columns)
+    if h.freshness_column and h.freshness_column.lower() in known:
+        ts = next(c for c in columns if c.name.lower() == h.freshness_column.lower())
+        why = f"loaded_at_field in {h.source}"
+    age = h.max_age_minutes or 1440
+    todo = "" if h.max_age_minutes else "  # TODO: how late is too late?"
     if ts is None:
         notes.append(f"no freshness check: {why}")
         out.append("  # freshness: no timestamp or date column found, so there is no freshness check")
     else:
-        out.append(f"  freshness: {{column: {_q(ts.name)}, maxAgeMinutes: 1440}}"
-                   f"  # TODO: how late is too late? ({ts.name} chosen as the {why})")
-        if UPDATED.search(ts.name.lower()) and not ARRIVAL.search(ts.name.lower()):
+        if h.max_age_minutes:
+            note = f"  # {h.source} freshness error_after; column: {why}" if "loaded_at" in why else \
+                f"  # {h.source} freshness; {ts.name} chosen as the {why}"
+        else:
+            note = f"{todo} ({ts.name} chosen as the {why})"
+        out.append(f"  freshness: {{column: {_q(ts.name)}, maxAgeMinutes: {age}}}{note}")
+        if UPDATED.search(ts.name.lower()) and not ARRIVAL.search(ts.name.lower()) and "loaded_at" not in why:
             notes.append(f"freshness uses {ts.name} (an update time); no volume check, because update times move "
                          "with edits as well as new rows")
         else:
@@ -110,21 +150,26 @@ def draft_contract(connection: str, dataset: str, columns: list[ColumnInfo], pri
 
 
 def run_init(conn: Connector, connection: str, schemas: list[str], tables: list[str], out_dir: Path, owner: str,
-             force: bool, interval_minutes: int = 60) -> tuple[list[tuple[Path, Draft]], list[str]]:
-    """Draft and write contracts. Returns (written files, skipped messages)."""
-    datasets = list(tables)
+             force: bool, interval_minutes: int = 60, dbt_tables: list | None = None,
+             ) -> tuple[list[tuple[Path, Draft]], list[str]]:
+    """Draft and write contracts. Returns (written files, skipped messages).
+
+    `dbt_tables` are `nullwake.dbt.DbtTable`s: their hints sharpen the drafts and their names name the contracts."""
+    jobs: list[tuple[str, Hints | None, str | None]] = [(t, None, None) for t in tables]
     for schema in schemas:
-        datasets += [f"{schema}.{t}" for t in conn.tables(schema)]
+        jobs += [(f"{schema}.{t}", None, None) for t in conn.tables(schema)]
+    jobs += [(t.dataset, t.hints, t.name) for t in dbt_tables or []]
     taken: set[str] = set()  # names used in this run: two schemas with an `orders` table give orders, orders_2
     written, skipped = [], []
     out_dir.mkdir(parents=True, exist_ok=True)
-    for dataset in datasets:
+    for dataset, hints, name_hint in jobs:
         columns = conn.columns(dataset)
         if not columns:
-            skipped.append(f"{dataset}: table not found or no columns visible to this role")
+            skipped.append(f"{dataset}: table not found or no columns visible to this role"
+                           + (" (has the dbt model been built?)" if hints else ""))
             continue
         draft = draft_contract(connection, dataset, columns, conn.primary_key(dataset), owner, taken,
-                               interval_minutes)
+                               interval_minutes, hints, name_hint)
         path = out_dir / f"{draft.name}.yaml"
         if path.exists() and not force:
             skipped.append(f"{dataset}: {path} already exists (use --force to overwrite)")

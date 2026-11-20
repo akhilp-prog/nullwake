@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.4 (2026-11-20)
+
+- `nullwake init --dbt target/manifest.json`: drafts contracts for dbt models, snapshots, seeds and sources. dbt's
+  `unique` / `not_null` tests, `dbt_utils.unique_combination_of_columns`, incremental `unique_key`, source
+  `loaded_at_field` + `freshness` and `meta.owner` / group owners carry over; columns and types still come from the
+  warehouse. `--select` narrows by name, `tag:` or `source:`. Ephemeral and disabled models and filtered tests are
+  skipped; tests on columns the table lacks, and models not yet built, are reported.
+
 ## 0.6.3 (2026-11-20)
 
 - `nullwake init`: drafts one contract per table from the warehouse's own definitions (columns, types, NOT NULL,

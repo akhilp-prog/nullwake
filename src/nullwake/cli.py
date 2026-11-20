@@ -156,9 +156,13 @@ def cmd_init(args) -> int:
     """Draft starter contracts from the warehouse's own table definitions."""
     from .connectors import ConnectorError, open_connector
     from .contracts import ContractError, load_bundle
+    from .dbt import ManifestError, load_manifest, select
     from .init import run_init
-    if not args.schema and not args.table:
-        print("error: give --schema SCHEMA and/or --table SCHEMA.TABLE", file=sys.stderr)
+    if not args.schema and not args.table and not args.dbt:
+        print("error: give --schema SCHEMA, --table SCHEMA.TABLE and/or --dbt target/manifest.json", file=sys.stderr)
+        return 2
+    if args.select and not args.dbt:
+        print("error: --select only applies with --dbt", file=sys.stderr)
         return 2
     try:
         bundle = load_bundle([args.connection_file])
@@ -173,10 +177,22 @@ def cmd_init(args) -> int:
         return 2
     conn_def = conns[0]
     out_dir = Path(args.out)
+    dbt_tables = []
+    if args.dbt:
+        try:
+            dbt_tables = select(load_manifest(Path(args.dbt), three_part=conn_def.type != "postgres"),
+                                args.select or [])
+        except ManifestError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        if not dbt_tables:
+            print("error: no dbt models, snapshots, seeds or sources matched"
+                  + (f" --select {' '.join(args.select)}" if args.select else ""), file=sys.stderr)
+            return 2
     try:
         with open_connector(conn_def.name, conn_def.type, conn_def.spec, args.timeout) as conn:
             written, skipped = run_init(conn, conn_def.name, args.schema or [], args.table or [], out_dir,
-                                        args.owner, args.force, args.interval)
+                                        args.owner, args.force, args.interval, dbt_tables)
     except ConnectorError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -231,6 +247,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--connection", help="connection name, if the file holds more than one")
     p.add_argument("--schema", action="append", help="draft a contract for every table in this schema (repeatable)")
     p.add_argument("--table", action="append", help="draft a contract for this table, e.g. analytics.orders (repeatable)")
+    p.add_argument("--dbt", metavar="MANIFEST", help="draft from a dbt manifest (target/manifest.json): its tests, "
+                   "source freshness and owners become checks")
+    p.add_argument("--select", action="append", help="with --dbt: a model or source table name, tag:NAME or "
+                   "source:NAME (repeatable)")
     p.add_argument("--out", default="contracts", help="directory to write contracts to (default: contracts)")
     p.add_argument("--owner", default="data-team@example.com", help="owner written into each contract")
     p.add_argument("--interval", type=int, default=60, help="check interval in minutes (default: 60)")

@@ -99,6 +99,19 @@ Columns, types, NOT NULL and declared primary keys come from the warehouse. A lo
 `ingested_at`, `created_at`, ...) becomes the freshness and volume check. Limits only your team knows, such as how late
 is too late, are marked TODO with conservative defaults.
 
+Already on dbt? Point `init` at your manifest and the rules you wrote in dbt carry over:
+
+```sh
+dbt parse                                                                       # writes target/manifest.json
+nullwake init connection.yaml --dbt target/manifest.json --select tag:finance
+```
+
+`unique` and `not_null` tests become column rules, `unique_combination_of_columns` and an incremental model's
+`unique_key` become the contract's key, a source's `loaded_at_field` and `freshness.error_after` become the freshness
+check (no TODO), and `meta.owner` or the model's group owner becomes the contract owner. Columns and types still come
+from the warehouse, so undocumented columns are covered too. `--select` takes a model or source table name,
+`tag:NAME` or `source:NAME`; filtered tests (`where:`) are left out because a contract checks the whole table.
+
 ## A data contract
 
 ```yaml
@@ -167,7 +180,7 @@ export NULLWAKE_TEST_WAREHOUSE_DSN="host=localhost dbname=warehouse user=postgre
 pytest
 ```
 
-The suite (96 tests) runs against real Postgres: checks against live tables, read-only and timeout enforcement,
+The suite (98 tests) runs against real Postgres: checks against live tables, read-only and timeout enforcement,
 incident lifecycle, `SKIP LOCKED` claiming under contention, signed webhook delivery and retry, RBAC, CSRF/origin
 checks, throttling, and the CLI's CI exit codes.
 
