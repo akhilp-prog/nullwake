@@ -4,19 +4,20 @@
 <section class="login">
   <a class="brand big" href="/"><span class="mark" aria-hidden="true"></span><span>null<b>wake</b></span></a>
   <p class="lede">Data contracts, freshness, volume and schema checks, and incident response for your warehouse.</p>
+  {% if settings.demo_mode and settings.demo_user and settings.demo_password %}
+  <div class="demo">
+    <strong>Live demo</strong>
+    <p>This instance watches a simulated retail warehouse that breaks on a schedule. Look around with read-only access, no sign-up.</p>
+    <form method="post" action="/demo"><button class="demo-go">Enter the live demo</button></form>
+  </div>
+  <p class="or">Or sign in to your account</p>
+  {% endif %}
   {% if error %}<p class="alert" role="alert">{{ error }}</p>{% endif %}
   <form method="post" action="/login" class="stack">
     <label>Email<input type="email" name="email" autocomplete="username" required maxlength="254"></label>
     <label>Password<input type="password" name="password" autocomplete="current-password" required maxlength="1024"></label>
     <button>Sign in</button>
   </form>
-  {% if settings.demo_mode and settings.demo_user %}
-  <div class="demo">
-    <strong>Live demo</strong>
-    <p>This instance monitors a simulated retail warehouse that breaks on a schedule. Read-only access:</p>
-    <p><code>{{ settings.demo_user }}</code> / <code>{{ settings.demo_password }}</code></p>
-  </div>
-  {% endif %}
   {% if settings.contact_name and (settings.contact_email or settings.contact_linkedin or settings.contact_github) %}
   <div class="contact">
     <strong>Built by {{ settings.contact_name }}</strong>

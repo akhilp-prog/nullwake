@@ -3,19 +3,140 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Nullwake: data contracts that run inside your network</title>
-<meta name="description" content="Nullwake checks your warehouse tables against data contracts written in YAML (freshness, volume, schema, nulls, duplicates and your own SQL rules), opens an incident when one breaks and closes it when the data is healthy. Self-hosted, read-only, open source.">
+<title>Nullwake: open-source data monitoring for dbt and your warehouse</title>
+<meta name="description" content="Nullwake is open-source data quality monitoring that runs inside your network. It checks Postgres, Snowflake and BigQuery tables for freshness, volume, schema and SQL rules, imports dbt tests, and alerts the owning team.">
 <link rel="canonical" href="https://nullwake.si/">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-96.png" type="image/png" sizes="96x96">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preload" href="/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/site.css">
 <meta name="theme-color" content="#10162B">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
 <meta property="og:type" content="website">
+<meta property="og:site_name" content="Nullwake">
 <meta property="og:url" content="https://nullwake.si/">
-<meta property="og:title" content="Nullwake: data contracts that run inside your network">
-<meta property="og:description" content="Know your data broke before anyone opens the dashboard. Freshness, volume, schema and data quality checks for Postgres, Snowflake and BigQuery, self-hosted and read-only.">
+<meta property="og:title" content="Nullwake: know your data broke before anyone opens the dashboard">
+<meta property="og:description" content="Open-source data monitoring for Postgres, Snowflake and BigQuery. Freshness, volume, schema and dbt tests, run on a schedule inside your network.">
 <meta property="og:image" content="https://nullwake.si/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Nullwake: open-source data monitoring for dbt and your warehouse">
+<meta name="twitter:description" content="Freshness, volume, schema and dbt tests, run on a schedule inside your network. Postgres, Snowflake, BigQuery.">
+<meta name="twitter:image" content="https://nullwake.si/img/og.png">
+<link rel="alternate" type="text/plain" href="/llms.txt" title="Nullwake summary for AI assistants">
+<script type="application/ld+json">
+[
+ {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": "Nullwake",
+  "alternateName": [
+   "nullwake.si",
+   "Nullwake data reliability"
+  ],
+  "url": "https://nullwake.si/"
+ },
+ {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "Nullwake",
+  "url": "https://nullwake.si/",
+  "logo": "https://nullwake.si/img/logo.png",
+  "email": "hello@nullwake.si",
+  "founder": {
+   "@type": "Person",
+   "name": "Akhil Pettem",
+   "url": "https://www.linkedin.com/in/akhil-p-8bbab842a/"
+  },
+  "sameAs": [
+   "https://www.linkedin.com/company/nullwake/",
+   "https://github.com/akhilp-prog/nullwake"
+  ]
+ },
+ {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Nullwake",
+  "url": "https://nullwake.si/",
+  "description": "Open-source, self-hosted data reliability tool. Runs data contracts (freshness, volume, schema, nulls, duplicates and SQL rules) against Postgres, Snowflake and BigQuery, opens incidents and alerts the owning team.",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Linux (Docker)",
+  "license": "https://www.apache.org/licenses/LICENSE-2.0",
+  "softwareVersion": "0.7.1",
+  "offers": {
+   "@type": "Offer",
+   "price": "0",
+   "priceCurrency": "USD"
+  },
+  "sameAs": "https://github.com/akhilp-prog/nullwake",
+  "image": "https://nullwake.si/img/og.png"
+ },
+ {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+   {
+    "@type": "Question",
+    "name": "What is Nullwake?",
+    "acceptedAnswer": {
+     "@type": "Answer",
+     "text": "Nullwake is an open-source data reliability and data quality monitoring tool. You describe what healthy data looks like in YAML data contracts (freshness, row volume, schema, nulls, duplicates and your own SQL rules). Nullwake runs those checks on a schedule against Postgres, Snowflake or BigQuery, opens an incident when one fails, alerts the team that owns the table, and closes the incident once the data is healthy again."
+    }
+   },
+   {
+    "@type": "Question",
+    "name": "Is Nullwake free and open source?",
+    "acceptedAnswer": {
+     "@type": "Answer",
+     "text": "Yes. The software is open source under the Apache 2.0 licence and the code is on GitHub. Companies that want setup help, support and priority fixes can take a yearly subscription after a free 30-day pilot."
+    }
+   },
+   {
+    "@type": "Question",
+    "name": "Does any of our data leave our network?",
+    "acceptedAnswer": {
+     "@type": "Answer",
+     "text": "No. You run Nullwake inside your own network, on one VM or your container platform. It connects to your warehouse with a read-only role and its checks read only counts and aggregates, never rows of data. Credentials stay in your environment. The security page has the details for a security review."
+    }
+   },
+   {
+    "@type": "Question",
+    "name": "Which warehouses does it support?",
+    "acceptedAnswer": {
+     "@type": "Answer",
+     "text": "Postgres 14 or later, Snowflake and BigQuery. All six check types have been verified against live Snowflake and BigQuery accounts with planted defects."
+    }
+   },
+   {
+    "@type": "Question",
+    "name": "We already use dbt tests. Why add Nullwake?",
+    "acceptedAnswer": {
+     "@type": "Answer",
+     "text": "dbt tests only run when someone runs dbt. If a load silently stops, nothing runs and nothing fails. Nullwake imports your existing dbt tests from manifest.json, runs them on their own schedule, adds freshness and volume checks, and turns failures into incidents with an owner, alerts and a history."
+    }
+   },
+   {
+    "@type": "Question",
+    "name": "How is it different from Monte Carlo, Soda or Elementary?",
+    "acceptedAnswer": {
+     "@type": "Answer",
+     "text": "Monte Carlo is a commercial, hosted data observability platform. Soda Core and Elementary are open-source frameworks that run checks as part of your pipelines or dbt runs. Nullwake is a self-hosted service of its own: it keeps checking on a schedule whether or not pipelines run, and handles incidents, ownership and alerts, while staying read-only inside your network."
+    }
+   },
+   {
+    "@type": "Question",
+    "name": "How do we set it up?",
+    "acceptedAnswer": {
+     "@type": "Answer",
+     "text": "Nullwake runs as one Docker Compose stack, which we set up together on a call during the pilot. Contracts for your 5 to 10 most important tables can be drafted from your dbt manifest within a day."
+    }
+   }
+  ]
+ }
+]
+</script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -28,6 +149,7 @@
       <li><a href="#dbt">dbt</a></li>
       <li><a href="#security">Security</a></li>
       <li><a href="#pilot">Pilot</a></li>
+      <li><a href="#faq">FAQ</a></li>
       <li><a href="#about">About</a></li>
     </ul>
     <a class="nav-demo" href="https://app.nullwake.si/">Live demo</a>
@@ -439,6 +561,22 @@
   </div>
 </section>
 
+<section class="sec wrap" id="faq" aria-labelledby="faq-h">
+  <div class="sec-head">
+    <h2 id="faq-h">Questions people ask</h2>
+    <p>Short answers. For anything not covered here, email <a href="mailto:hello@nullwake.si">hello@nullwake.si</a>.</p>
+  </div>
+  <div class="faq">
+    <details open><summary>What is Nullwake?</summary><p>Nullwake is an open-source data reliability and data quality monitoring tool. You describe what healthy data looks like in YAML data contracts (freshness, row volume, schema, nulls, duplicates and your own SQL rules). Nullwake runs those checks on a schedule against Postgres, Snowflake or BigQuery, opens an incident when one fails, alerts the team that owns the table, and closes the incident once the data is healthy again.</p></details>
+    <details><summary>Is Nullwake free and open source?</summary><p>Yes. The software is open source under the Apache 2.0 licence and the code is on <a href="https://github.com/akhilp-prog/nullwake">GitHub</a>. Companies that want setup help, support and priority fixes can take a yearly subscription after a free 30-day pilot.</p></details>
+    <details><summary>Does any of our data leave our network?</summary><p>No. You run Nullwake inside your own network, on one VM or your container platform. It connects to your warehouse with a read-only role and its checks read only counts and aggregates, never rows of data. Credentials stay in your environment. The <a href="/security">security page</a> has the details for a security review.</p></details>
+    <details><summary>Which warehouses does it support?</summary><p>Postgres 14 or later, Snowflake and BigQuery. All six check types have been verified against live Snowflake and BigQuery accounts with planted defects.</p></details>
+    <details><summary>We already use dbt tests. Why add Nullwake?</summary><p>dbt tests only run when someone runs dbt. If a load silently stops, nothing runs and nothing fails. Nullwake imports your existing dbt tests from <code>manifest.json</code>, runs them on their own schedule, adds freshness and volume checks, and turns failures into incidents with an owner, alerts and a history.</p></details>
+    <details><summary>How is it different from Monte Carlo, Soda or Elementary?</summary><p>Monte Carlo is a commercial, hosted data observability platform. Soda Core and Elementary are open-source frameworks that run checks as part of your pipelines or dbt runs. Nullwake is a self-hosted service of its own: it keeps checking on a schedule whether or not pipelines run, and handles incidents, ownership and alerts, while staying read-only inside your network.</p></details>
+    <details><summary>How do we set it up?</summary><p>Nullwake runs as one Docker Compose stack, which we set up together on a call during the pilot. Contracts for your 5 to 10 most important tables can be drafted from your dbt manifest within a day.</p></details>
+  </div>
+</section>
+
 <section class="sec wrap" id="about" aria-labelledby="about-h">
   <div class="sec-head">
     <h2 id="about-h">Who builds it</h2>
@@ -448,11 +586,12 @@
   <div class="status">
     <h3>Where it stands, November 2026</h3>
     <dl>
-      <div><dt>Version</dt><dd>0.6.2, running in production at app.nullwake.si</dd></div>
+      <div><dt>Version</dt><dd>0.7.1, running in production at app.nullwake.si</dd></div>
       <div><dt>Postgres</dt><dd>Tested end to end against real databases</dd></div>
       <div><dt>Snowflake</dt><dd>Verified against a live account: all six check types pass on healthy data and planted defects are caught</dd></div>
       <div><dt>BigQuery</dt><dd>Verified against a live project with a read-only service account: all six check types pass and planted defects are caught</dd></div>
-      <div><dt>Next</dt><dd>Single sign-on (OIDC), PagerDuty and Opsgenie alerts, contracts generated from dbt, a Helm chart</dd></div>
+      <div><dt>dbt</dt><dd>Contracts drafted from a dbt manifest, tested on dbt Labs’ jaffle_shop</dd></div>
+      <div><dt>Next</dt><dd>Single sign-on (OIDC), PagerDuty and Opsgenie alerts, a Helm chart</dd></div>
     </dl>
   </div>
 </section>

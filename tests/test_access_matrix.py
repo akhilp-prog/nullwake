@@ -17,7 +17,7 @@ RANK = {"public": -1, "viewer": 0, "editor": 1, "admin": 2}
 POLICY = {
     ("GET", "/healthz"): "public", ("GET", "/readyz"): "public", ("GET", "/watchdog"): "public",
     ("GET", "/metrics"): "public",  # counts only; blocked at the bundled proxy (docs/security.md)
-    ("GET", "/login"): "public", ("POST", "/login"): "public",
+    ("GET", "/login"): "public", ("POST", "/login"): "public", ("POST", "/demo"): "public",
     ("POST", "/logout"): "viewer",
     ("GET", "/"): "viewer", ("GET", "/incidents"): "viewer", ("GET", "/incidents/{incident_id}"): "viewer",
     ("GET", "/contracts"): "viewer", ("GET", "/contracts/{name}"): "viewer", ("GET", "/checks/{check_id}"): "viewer",

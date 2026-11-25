@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.1 (2026-11-25)
+
+- Demo mode: one-click "Enter the live demo" button on the sign-in page (`POST /demo`). It signs in only to the
+  configured demo account, refuses unless that account is a viewer, and keeps the same origin check and throttle as
+  `/login`. Demo sessions last at most 8 hours. The demo password is no longer shown on the page.
+- Visitors page counts one-click demo entries as demo sign-ins.
+
 ## 0.7.0 (2026-11-20)
 
 Least privilege, after an external security review. Breaking for existing deployments: see docs/operations.md,

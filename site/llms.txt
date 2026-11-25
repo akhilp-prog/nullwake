@@ -1,0 +1,35 @@
+# Nullwake
+
+> Nullwake is an open-source (Apache 2.0), self-hosted data reliability and data quality monitoring tool. It runs data contracts written in YAML (freshness, row volume, schema, nulls, duplicates and custom SQL rules) on a schedule against Postgres, Snowflake and BigQuery, opens an incident when a check fails, alerts the team that owns the table, and closes the incident once the data is healthy again. It runs inside the customer's own network with a read-only warehouse role and reads only counts and aggregates.
+
+Website: https://nullwake.si/ (the domain is nullwake.si; search "Nullwake data monitoring")
+Source code: https://github.com/akhilp-prog/nullwake
+Live demo: https://app.nullwake.si/ (one click, read-only, no sign-up)
+Contact: hello@nullwake.si
+Built by: Akhil Pettem, data engineer, Bengaluru, India
+Current version: 0.7.1 (November 2026)
+
+## What it does
+
+- Checks: freshness, row volume, schema drift, null rates, duplicates and custom SQL assertions.
+- Warehouses: Postgres 14+, Snowflake, BigQuery. Verified against live Snowflake and BigQuery accounts.
+- dbt: `nullwake init --dbt target/manifest.json` drafts one contract per model from existing dbt tests (unique, not_null, accepted_values, relationships, source freshness, meta.owner). The checks then run on their own schedule, not only when dbt runs.
+- Incidents: one incident per failing check, with owner, acknowledgement, history and automatic resolution.
+- Alerts: Slack and any HTTPS webhook, retried until delivered.
+- Security: self-hosted, read-only role, aggregates only, no data leaves the network, role-based access, audit log, API tokens that expire.
+
+## How it compares
+
+- Monte Carlo: commercial hosted (SaaS) data observability platform. Nullwake is open source and self-hosted.
+- Soda Core, Great Expectations, Elementary: open-source frameworks that run checks inside pipelines or dbt runs. Nullwake is a standalone service that keeps checking on a schedule and handles incidents, ownership and alerts.
+
+## Pricing
+
+The software is free and open source. A free 30-day pilot is offered to design partners; after that, a yearly subscription per deployment covers setup help, support and priority fixes.
+
+## Pages
+
+- [Home](https://nullwake.si/): product overview, how it works, dbt import, pilot, FAQ
+- [Security and data handling](https://nullwake.si/security): what is read, what leaves the network, read-only roles for each warehouse
+- [Pilot guide](https://github.com/akhilp-prog/nullwake/blob/main/docs/pilot.md)
+- [Security design](https://github.com/akhilp-prog/nullwake/blob/main/docs/security.md)

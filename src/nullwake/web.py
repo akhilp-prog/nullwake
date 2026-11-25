@@ -104,6 +104,30 @@ def login(request: Request, email: str = Form(..., max_length=254), password: st
     return response
 
 
+@router.post("/demo")
+def demo_login(request: Request, db: Session = Depends(get_db), settings: Settings = Depends(settings_dep)):
+    """One-click sign-in to the public demo. Exists only in demo mode, and only for a read-only (viewer) account."""
+    if not (settings.demo_mode and settings.demo_user and settings.demo_password):
+        raise HTTPException(404)
+    if request.headers.get("origin") != settings.origin:
+        raise HTTPException(403, "request origin could not be verified")
+    keys = [f"ip:{client_ip(request, settings)}"]
+    if throttled(db, keys):
+        return render(request, "login.html", None, 429, settings=settings,
+                      error="Too many sign-in attempts. Wait 15 minutes and try again.")
+    user = verify_login(db, settings.demo_user, settings.demo_password)
+    if user is None or user.role != "viewer":
+        record_failure(db, keys)
+        return render(request, "login.html", None, 503, settings=settings,
+                      error="The demo is not available right now. Try again in a few minutes.")
+    token, _ = create_session(db, user, min(settings.session_hours, 8))
+    engine.audit(db, user.email, "auth.demo", "", ip=keys[0][3:])
+    response = RedirectResponse("/", 303)
+    response.set_cookie(SESSION_COOKIE, token, max_age=min(settings.session_hours, 8) * 3600, httponly=True,
+                        secure=settings.secure_cookies, samesite="lax", path="/")
+    return response
+
+
 @router.post("/logout")
 def logout(request: Request, csrf: str = Form(""), db: Session = Depends(get_db),
            user: Principal = Depends(page_user), settings: Settings = Depends(settings_dep)):
