@@ -98,15 +98,16 @@ from analytics.fct_orders;</code></pre>
 <pre class="code-block"><code>with daily as (
   select date_trunc('day', loaded_at) as day, count(*) as n
   from analytics.fct_orders
-  where loaded_at &gt;= now() - interval '15 days'
+  where loaded_at &gt;= current_date - 15
+    and loaded_at &lt; current_date - 1
   group by 1
 )
 select
-  (select n from daily
-    where day = date_trunc('day', now() - interval '1 day')) as yesterday,
-  percentile_cont(0.5) within group (order by n) as typical
-from daily
-where day &lt; date_trunc('day', now() - interval '1 day');</code></pre>
+  (select count(*) from analytics.fct_orders
+    where loaded_at &gt;= current_date - 1
+      and loaded_at &lt; current_date) as yesterday,
+  (select percentile_cont(0.5) within group (order by n)
+    from daily) as typical;</code></pre>
   <p>Compare with the median of recent windows rather than a fixed threshold. A fixed "alert below 10,000 rows" breaks on weekends, holidays and growth. The median also keeps one bad day from shifting the baseline, which an average would not.</p>
 </section>
 

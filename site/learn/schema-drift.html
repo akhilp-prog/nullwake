@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Detect schema drift in your warehouse with information_schema (and why your joins return NULL instead of failing)</title>
+<meta name="description" content="How to detect schema drift before it breaks dashboards: compare the warehouse&#x27;s columns with an expected list using information_schema, alert on missing, retyped and new columns, and turn the list into a data contract.">
+<link rel="canonical" href="https://nullwake.si/learn/schema-drift">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-96.png" type="image/png" sizes="96x96">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preload" href="/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/site.css">
+<meta name="theme-color" content="#10162B">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Nullwake">
+<meta property="og:url" content="https://nullwake.si/learn/schema-drift">
+<meta property="og:title" content="Detect schema drift in your warehouse with information_schema (and why your joins return NULL instead of failing)">
+<meta property="og:description" content="How to detect schema drift before it breaks dashboards: compare the warehouse&#x27;s columns with an expected list using information_schema, alert on missing, retyped and new columns, and turn the list into a data contract.">
+<meta property="og:image" content="https://nullwake.si/img/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@type": "TechArticle",
+ "headline": "Schema drift: someone renamed a column upstream",
+ "description": "How to detect schema drift before it breaks dashboards: compare the warehouse's columns with an expected list using information_schema, alert on missing, retyped and new columns, and turn the list into a data contract.",
+ "datePublished": "2026-11-25",
+ "dateModified": "2026-11-25",
+ "url": "https://nullwake.si/learn/schema-drift",
+ "image": "https://nullwake.si/img/og.png",
+ "author": {
+  "@type": "Person",
+  "name": "Akhil Pettem",
+  "url": "https://www.linkedin.com/in/akhil-p-8bbab842a/"
+ },
+ "publisher": {
+  "@type": "Organization",
+  "name": "Nullwake",
+  "url": "https://nullwake.si/",
+  "logo": {
+   "@type": "ImageObject",
+   "url": "https://nullwake.si/img/logo.png"
+  }
+ }
+}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero hero-page">
+  <nav class="nav wrap" aria-label="Main">
+    <a class="logo" href="/" aria-label="Nullwake home"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="4"/><circle cx="16" cy="16" r="3.4" fill="currentColor"/></svg>nullwake</a>
+    <ul>
+      <li><a href="/#how">How it works</a></li>
+      <li><a href="/security">Security</a></li>
+      <li><a href="/learn" aria-current="page">Learn</a></li>
+      <li><a href="/#pilot">Pilot</a></li>
+      <li><a href="/#about">About</a></li>
+    </ul>
+    <a class="nav-demo" href="https://app.nullwake.si/">Live demo</a>
+  </nav>
+  <div class="wrap page-head">
+    <p class="kicker"><a href="/learn">Learn</a> · Day 4 of 30 Days of Data Reliability</p>
+    <h1>Schema drift: someone renamed a column upstream</h1>
+    <p class="lede">An upstream team renames a column and their deploy goes fine. Yours often does too, and that is the problem: the column quietly becomes NULL and every downstream number shifts.</p>
+    <p class="byline">By Akhil Pettem · 2026-11-25</p>
+  </div>
+</header>
+
+<main id="main" class="doc wrap">
+<nav class="toc" aria-label="On this page"><p>On this page</p><ol><li><a href="#problem">Why nothing breaks</a></li><li><a href="#check">The check</a></li><li><a href="#which">Which differences to alert on</a></li><li><a href="#contract">The expected list is a data contract</a></li><li><a href="#when">When to run it</a></li><li><a href="#other">Snowflake and BigQuery</a></li><li><a href="#nullwake">Doing this with Nullwake</a></li></ol></nav>
+<article class="doc-body">
+<section id="problem">
+  <h2>Why nothing breaks</h2>
+  <p>A team renames <code>customer_id</code> to <code>cust_id</code>, changes <code>amount</code> from a number to text, or drops a column they think nobody uses. Some of your models fail loudly, which is the good case. The bad cases are quieter:</p>
+  <ul>
+    <li>A model that selects <code>*</code> simply no longer has the column, and a later step fills it with NULL.</li>
+    <li>A join on the renamed key matches nothing, so a left join returns NULLs and an inner join returns fewer rows.</li>
+    <li>A number stored as text still sums in some tools, or sorts wrongly in others.</li>
+  </ul>
+  <p>The check is to compare the columns that exist with the columns you depend on, before anything downstream reads them.</p>
+</section>
+
+<section id="check">
+  <h2>The check</h2>
+  <p>Every warehouse describes its own tables in <code>information_schema.columns</code>. Write down the columns you expect, and compare:</p>
+<pre class="code-block"><code>with expected(column_name, data_type) as (
+  values ('order_id',    'bigint'),
+         ('customer_id', 'bigint'),
+         ('amount',      'numeric'),
+         ('loaded_at',   'timestamp with time zone')
+),
+actual as (
+  select column_name, data_type
+  from information_schema.columns
+  where table_schema = 'analytics' and table_name = 'fct_orders'
+)
+select coalesce(e.column_name, a.column_name) as column_name,
+       e.data_type as expected_type,
+       a.data_type as actual_type,
+       case when a.column_name is null then 'missing'
+            when e.column_name is null then 'new'
+            else 'type changed' end as problem
+from expected e
+full join actual a on a.column_name = e.column_name
+where a.column_name is null
+   or e.column_name is null
+   or a.data_type &lt;&gt; e.data_type;</code></pre>
+  <p>No rows back means the table matches. Any row is a difference, with the reason next to it.</p>
+</section>
+
+<section id="which">
+  <h2>Which differences to alert on</h2>
+  <ul>
+    <li><b>Missing column:</b> always alert. Something downstream almost certainly reads it.</li>
+    <li><b>Type changed:</b> always alert. Even a widening change, such as integer to bigint, is worth a look; a number becoming text never is harmless.</li>
+    <li><b>New column:</b> usually fine. Alert only on tables that should be locked down, such as tables shared with other teams or with personal data, where a new column can mean data you did not agree to receive.</li>
+  </ul>
+  <p>Column order rarely matters, and checking it causes noise. Leave it out unless a consumer reads columns by position.</p>
+</section>
+
+<section id="contract">
+  <h2>The expected list is a data contract</h2>
+  <p>The <code>values</code> list in the query is the most valuable part. Keep it in your repository next to the models, and review changes to it in pull requests. Then a schema change becomes a conversation before the deploy rather than an incident after it.</p>
+  <p>It also answers a question many teams cannot: who agreed to what? If the team that produces the table owns the list, they know a rename will break you before they ship it.</p>
+</section>
+
+<section id="when">
+  <h2>When to run it</h2>
+  <p>Run schema checks on tables that other teams or tools write to: raw loads from SaaS connectors, event streams, tables owned by an application team. Those are the ones that change without your code changing. Run it on a schedule, like freshness, not only during your pipeline: the change usually lands between your runs.</p>
+</section>
+
+<section id="other">
+  <h2>Snowflake and BigQuery</h2>
+  <p>Snowflake stores names in upper case unless they were quoted, so compare with <code>upper(column_name)</code> or list the expected names in upper case; types read as <code>NUMBER</code>, <code>TEXT</code> and <code>TIMESTAMP_TZ</code>. In BigQuery, query <code>`project.dataset.INFORMATION_SCHEMA.COLUMNS`</code> with <code>where table_name = 'fct_orders'</code>; types read as <code>INT64</code>, <code>NUMERIC</code>, <code>STRING</code> and <code>TIMESTAMP</code>.</p>
+</section>
+
+<section id="nullwake">
+  <h2>Doing this with Nullwake</h2>
+  <p>In a Nullwake data contract the expected columns are the schema section, reviewed in pull requests like any other code:</p>
+<pre class="code-block"><code>schema:
+  allowAdditionalColumns: true
+  columns:
+    - {name: order_id, type: bigint, nullable: false}
+    - {name: customer_id, type: bigint}
+    - {name: amount, type: numeric}
+    - {name: loaded_at, type: timestamptz}</code></pre>
+  <p>Nullwake compares it with the warehouse on a schedule, opens an incident naming the missing or changed column for the owning team, and lets an editor accept an intended change in one click. <code>nullwake init</code> drafts the list from your existing tables, so you do not type it by hand. The <a href="https://app.nullwake.si/">live demo</a> renames a column on a schedule so you can watch it happen. Previous guide: <a href="/learn/volume-checks">volume</a>.</p>
+</section>
+</article>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <p class="foot-brand"><span class="logo"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="4"/><circle cx="16" cy="16" r="3.4" fill="currentColor"/></svg>nullwake</span> Data contracts that run inside your network.</p>
+    <p class="foot-links"><a href="mailto:hello@nullwake.si">hello@nullwake.si</a> <a href="/security">Security</a> <a href="/learn">Learn</a> <a href="https://app.nullwake.si/">Live demo</a> <a href="https://github.com/akhilp-prog/nullwake">GitHub</a></p>
+    <p class="privacy">This site sets no cookies, runs no JavaScript and loads nothing from other domains. Visits are logged with shortened IP addresses and deleted after 30 days.</p>
+  </div>
+</footer>
+</body>
+</html>

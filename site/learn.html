@@ -41,7 +41,11 @@
   </div>
 </header>
 <main id="main" class="wrap learn-list"><ul><li><a href="/learn/quiet-data-failures"><span class="kicker">Day 1 of 30 Days of Data Reliability</span>
-<b>Data that is wrong without anything failing</b><span>The costliest data problems in a warehouse don&#x27;t raise an error. Here are the five that show up most often, what each looks like, and one SQL check that catches it.</span></a></li></ul></main>
+<b>Data that is wrong without anything failing</b><span>The costliest data problems in a warehouse don&#x27;t raise an error. Here are the five that show up most often, what each looks like, and one SQL check that catches it.</span></a></li><li><a href="/learn/freshness-checks"><span class="kicker">Day 2 of 30 Days of Data Reliability</span>
+<b>Freshness: the one check every table needs</b><span>If a table gets only one check, make it freshness. It is one line of SQL, but three details decide whether it catches a stopped load or quietly passes.</span></a></li><li><a href="/learn/volume-checks"><span class="kicker">Day 3 of 30 Days of Data Reliability</span>
+<b>Volume: on time, but half the rows</b><span>A table can be fresh and still be wrong: the load ran on time but brought half the rows, or ran twice. A volume check catches both, if you compare against the right baseline.</span></a></li><li><a href="/learn/schema-drift"><span class="kicker">Day 4 of 30 Days of Data Reliability</span>
+<b>Schema drift: someone renamed a column upstream</b><span>An upstream team renames a column and their deploy goes fine. Yours often does too, and that is the problem: the column quietly becomes NULL and every downstream number shifts.</span></a></li><li><a href="/learn/dbt-tests-schedule"><span class="kicker">Day 5 of 30 Days of Data Reliability</span>
+<b>Why your dbt tests miss things</b><span>If you use dbt, you have already written good data quality rules. The catch is when they run: only when dbt does. When a load stalls, dbt has nothing to run, and every test stays green.</span></a></li></ul></main>
 
 <footer class="foot">
   <div class="wrap foot-in">

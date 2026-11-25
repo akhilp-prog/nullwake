@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dbt tests only run when dbt runs: how to catch stale sources and failed loads between runs</title>
+<meta name="description" content="dbt tests are good data quality rules, but they only run when dbt runs, so a stalled load leaves every test green. How to schedule dbt source freshness properly, and how to run your dbt tests as independent checks.">
+<link rel="canonical" href="https://nullwake.si/learn/dbt-tests-schedule">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-96.png" type="image/png" sizes="96x96">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preload" href="/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/site.css">
+<meta name="theme-color" content="#10162B">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Nullwake">
+<meta property="og:url" content="https://nullwake.si/learn/dbt-tests-schedule">
+<meta property="og:title" content="dbt tests only run when dbt runs: how to catch stale sources and failed loads between runs">
+<meta property="og:description" content="dbt tests are good data quality rules, but they only run when dbt runs, so a stalled load leaves every test green. How to schedule dbt source freshness properly, and how to run your dbt tests as independent checks.">
+<meta property="og:image" content="https://nullwake.si/img/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@type": "TechArticle",
+ "headline": "Why your dbt tests miss things",
+ "description": "dbt tests are good data quality rules, but they only run when dbt runs, so a stalled load leaves every test green. How to schedule dbt source freshness properly, and how to run your dbt tests as independent checks.",
+ "datePublished": "2026-11-25",
+ "dateModified": "2026-11-25",
+ "url": "https://nullwake.si/learn/dbt-tests-schedule",
+ "image": "https://nullwake.si/img/og.png",
+ "author": {
+  "@type": "Person",
+  "name": "Akhil Pettem",
+  "url": "https://www.linkedin.com/in/akhil-p-8bbab842a/"
+ },
+ "publisher": {
+  "@type": "Organization",
+  "name": "Nullwake",
+  "url": "https://nullwake.si/",
+  "logo": {
+   "@type": "ImageObject",
+   "url": "https://nullwake.si/img/logo.png"
+  }
+ }
+}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero hero-page">
+  <nav class="nav wrap" aria-label="Main">
+    <a class="logo" href="/" aria-label="Nullwake home"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="4"/><circle cx="16" cy="16" r="3.4" fill="currentColor"/></svg>nullwake</a>
+    <ul>
+      <li><a href="/#how">How it works</a></li>
+      <li><a href="/security">Security</a></li>
+      <li><a href="/learn" aria-current="page">Learn</a></li>
+      <li><a href="/#pilot">Pilot</a></li>
+      <li><a href="/#about">About</a></li>
+    </ul>
+    <a class="nav-demo" href="https://app.nullwake.si/">Live demo</a>
+  </nav>
+  <div class="wrap page-head">
+    <p class="kicker"><a href="/learn">Learn</a> · Day 5 of 30 Days of Data Reliability</p>
+    <h1>Why your dbt tests miss things</h1>
+    <p class="lede">If you use dbt, you have already written good data quality rules. The catch is when they run: only when dbt does. When a load stalls, dbt has nothing to run, and every test stays green.</p>
+    <p class="byline">By Akhil Pettem · 2026-11-25</p>
+  </div>
+</header>
+
+<main id="main" class="doc wrap">
+<nav class="toc" aria-label="On this page"><p>On this page</p><ol><li><a href="#good">What dbt tests do well</a></li><li><a href="#gap">The gap: tests run with the build</a></li><li><a href="#fix">Closing the gap</a></li><li><a href="#owner">Give every failure an owner</a></li><li><a href="#nullwake">Doing this with Nullwake</a></li></ol></nav>
+<article class="doc-body">
+<section id="good">
+  <h2>What dbt tests do well</h2>
+  <p>dbt's generic tests describe what good data looks like, right next to the models:</p>
+<pre class="code-block"><code>models:
+  - name: orders
+    columns:
+      - name: order_id
+        tests: [unique, not_null]
+      - name: status
+        tests:
+          - accepted_values:
+              values: [placed, shipped, completed, returned]
+      - name: customer_id
+        tests:
+          - relationships: {to: ref('customers'), field: customer_id}</code></pre>
+  <p>These are exactly the rules a data team should have. Most teams that use dbt already have dozens of them. The gap is not the rules; it is when they run.</p>
+</section>
+
+<section id="gap">
+  <h2>The gap: tests run with the build</h2>
+  <p>A dbt test runs when someone runs <code>dbt test</code> or <code>dbt build</code>, usually as part of the scheduled job that builds the models. That creates three blind spots:</p>
+  <ul>
+    <li><b>The load never arrives.</b> If the source data stops, the job may still run and test yesterday's data, which passes. If the job itself is skipped or fails before the test step, no tests run at all.</li>
+    <li><b>Between runs.</b> A daily build tests the data once a day. Anything that breaks after the build is invisible until the next one.</li>
+    <li><b>Freshness isn't scheduled.</b> dbt can check source freshness with <code>loaded_at_field</code> and <code>freshness</code> settings, but only when someone runs <code>dbt source freshness</code>. Many teams configure it and never schedule it, or run it inside the same job that is supposed to be monitored.</li>
+  </ul>
+  <p>Each of the failures from this series, a stale table, a partial load, a renamed column, can therefore slip past a project with good tests.</p>
+</section>
+
+<section id="fix">
+  <h2>Closing the gap</h2>
+  <p>Three steps, in order of effort:</p>
+  <ol>
+    <li><b>Schedule source freshness on its own.</b> Run <code>dbt source freshness</code> as a separate job every hour or so, independent of the build. If the build job breaks, this one still runs and still alerts.</li>
+    <li><b>Add a volume expectation</b> to your most important sources, as in <a href="/learn/volume-checks">the volume guide</a>. Fresh but half-empty is the failure dbt's built-in tests miss most often.</li>
+    <li><b>Run the important tests on a schedule too,</b> not only after builds, and route failures to the team that owns the model, not a shared channel.</li>
+  </ol>
+</section>
+
+<section id="owner">
+  <h2>Give every failure an owner</h2>
+  <p>A failing test in a CI log is a fact; an alert that reaches the team that owns the table is something that gets fixed. dbt has a place for this already: <code>meta: {owner: …}</code> on models and sources, and groups with owners. Fill it in for the tables that matter, and use it to route alerts.</p>
+</section>
+
+<section id="nullwake">
+  <h2>Doing this with Nullwake</h2>
+  <p>This is the gap Nullwake was built for. Point it at your dbt manifest and it drafts one data contract per model from the tests you already have:</p>
+<pre class="code-block"><code>dbt parse     # writes target/manifest.json
+nullwake init connection.yaml --dbt target/manifest.json</code></pre>
+  <ul>
+    <li><code>unique</code> and <code>not_null</code> become column rules.</li>
+    <li><code>accepted_values</code> and <code>relationships</code> become SQL checks.</li>
+    <li>A source's <code>loaded_at_field</code> and freshness become the freshness check.</li>
+    <li><code>meta.owner</code> or the group owner becomes the contract owner.</li>
+  </ul>
+  <p>Nullwake then runs those checks on their own schedule, adds freshness and volume, opens an incident for the owning team when one fails, and closes it when the data recovers. It runs inside your network and reads only counts and aggregates. Tried on dbt Labs' jaffle_shop: every carried-over test passes on the built project and fails when a bad row is inserted.</p>
+  <p>If you would like contracts drafted for 3 to 5 of your models, <a href="mailto:hello@nullwake.si?subject=dbt%20manifest">send your manifest</a> and they come back within a day, or try the <a href="https://app.nullwake.si/">live demo</a> first, with one click and no sign-up. Previous guide: <a href="/learn/schema-drift">schema drift</a>.</p>
+</section>
+</article>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <p class="foot-brand"><span class="logo"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="4"/><circle cx="16" cy="16" r="3.4" fill="currentColor"/></svg>nullwake</span> Data contracts that run inside your network.</p>
+    <p class="foot-links"><a href="mailto:hello@nullwake.si">hello@nullwake.si</a> <a href="/security">Security</a> <a href="/learn">Learn</a> <a href="https://app.nullwake.si/">Live demo</a> <a href="https://github.com/akhilp-prog/nullwake">GitHub</a></p>
+    <p class="privacy">This site sets no cookies, runs no JavaScript and loads nothing from other domains. Visits are logged with shortened IP addresses and deleted after 30 days.</p>
+  </div>
+</footer>
+</body>
+</html>

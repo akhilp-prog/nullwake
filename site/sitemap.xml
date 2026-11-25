@@ -4,5 +4,9 @@
   <url><loc>https://nullwake.si/security</loc><lastmod>2026-11-25</lastmod></url>
   <url><loc>https://nullwake.si/learn</loc><lastmod>2026-11-25</lastmod></url>
   <url><loc>https://nullwake.si/learn/quiet-data-failures</loc><lastmod>2026-11-25</lastmod></url>
+  <url><loc>https://nullwake.si/learn/freshness-checks</loc><lastmod>2026-11-25</lastmod></url>
+  <url><loc>https://nullwake.si/learn/volume-checks</loc><lastmod>2026-11-25</lastmod></url>
+  <url><loc>https://nullwake.si/learn/schema-drift</loc><lastmod>2026-11-25</lastmod></url>
+  <url><loc>https://nullwake.si/learn/dbt-tests-schedule</loc><lastmod>2026-11-25</lastmod></url>
   <url><loc>https://nullwake.si/llms.txt</loc><lastmod>2026-11-25</lastmod></url>
 </urlset>

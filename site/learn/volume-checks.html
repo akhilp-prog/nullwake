@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Row count anomaly detection in SQL: catch partial loads and double backfills with a median baseline</title>
+<meta name="description" content="How to detect partial loads and duplicated backfills with a row-count check: why fixed thresholds fail, how to compare with a median and MAD baseline, and how to handle weekly patterns. Tested SQL included.">
+<link rel="canonical" href="https://nullwake.si/learn/volume-checks">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-96.png" type="image/png" sizes="96x96">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preload" href="/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/site.css">
+<meta name="theme-color" content="#10162B">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Nullwake">
+<meta property="og:url" content="https://nullwake.si/learn/volume-checks">
+<meta property="og:title" content="Row count anomaly detection in SQL: catch partial loads and double backfills with a median baseline">
+<meta property="og:description" content="How to detect partial loads and duplicated backfills with a row-count check: why fixed thresholds fail, how to compare with a median and MAD baseline, and how to handle weekly patterns. Tested SQL included.">
+<meta property="og:image" content="https://nullwake.si/img/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@type": "TechArticle",
+ "headline": "Volume: on time, but half the rows",
+ "description": "How to detect partial loads and duplicated backfills with a row-count check: why fixed thresholds fail, how to compare with a median and MAD baseline, and how to handle weekly patterns. Tested SQL included.",
+ "datePublished": "2026-11-25",
+ "dateModified": "2026-11-25",
+ "url": "https://nullwake.si/learn/volume-checks",
+ "image": "https://nullwake.si/img/og.png",
+ "author": {
+  "@type": "Person",
+  "name": "Akhil Pettem",
+  "url": "https://www.linkedin.com/in/akhil-p-8bbab842a/"
+ },
+ "publisher": {
+  "@type": "Organization",
+  "name": "Nullwake",
+  "url": "https://nullwake.si/",
+  "logo": {
+   "@type": "ImageObject",
+   "url": "https://nullwake.si/img/logo.png"
+  }
+ }
+}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero hero-page">
+  <nav class="nav wrap" aria-label="Main">
+    <a class="logo" href="/" aria-label="Nullwake home"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="4"/><circle cx="16" cy="16" r="3.4" fill="currentColor"/></svg>nullwake</a>
+    <ul>
+      <li><a href="/#how">How it works</a></li>
+      <li><a href="/security">Security</a></li>
+      <li><a href="/learn" aria-current="page">Learn</a></li>
+      <li><a href="/#pilot">Pilot</a></li>
+      <li><a href="/#about">About</a></li>
+    </ul>
+    <a class="nav-demo" href="https://app.nullwake.si/">Live demo</a>
+  </nav>
+  <div class="wrap page-head">
+    <p class="kicker"><a href="/learn">Learn</a> · Day 3 of 30 Days of Data Reliability</p>
+    <h1>Volume: on time, but half the rows</h1>
+    <p class="lede">A table can be fresh and still be wrong: the load ran on time but brought half the rows, or ran twice. A volume check catches both, if you compare against the right baseline.</p>
+    <p class="byline">By Akhil Pettem · 2026-11-25</p>
+  </div>
+</header>
+
+<main id="main" class="doc wrap">
+<nav class="toc" aria-label="On this page"><p>On this page</p><ol><li><a href="#problem">What freshness misses</a></li><li><a href="#fixed">Why a fixed threshold fails</a></li><li><a href="#median">Compare with the median, and measure the spread</a></li><li><a href="#weekly">Weekly patterns</a></li><li><a href="#window">Choosing the window</a></li><li><a href="#other">Snowflake and BigQuery</a></li><li><a href="#nullwake">Doing this with Nullwake</a></li></ol></nav>
+<article class="doc-body">
+<section id="problem">
+  <h2>What freshness misses</h2>
+  <p>An API returns its first page and stops. A file lands truncated. An upstream filter changes and drops one country. In every case rows still arrive on schedule, so a freshness check passes.</p>
+  <p>The reverse happens too: a retry or a backfill without a merge key loads a day twice, and revenue for that day doubles. Bigger numbers rarely look like an error.</p>
+  <p>A volume check counts rows in the latest window and asks whether that count is normal.</p>
+</section>
+
+<section id="fixed">
+  <h2>Why a fixed threshold fails</h2>
+  <p>The first version most teams write is "alert if fewer than 10,000 rows". It breaks within weeks:</p>
+  <ul>
+    <li>Weekends and holidays are quieter, so it fires every Sunday.</li>
+    <li>The business grows, so a load that drops 30% still clears the old minimum.</li>
+    <li>Nobody remembers to update the number.</li>
+  </ul>
+  <p>The fix is to let the table's own history decide what normal is.</p>
+</section>
+
+<section id="median">
+  <h2>Compare with the median, and measure the spread</h2>
+  <p>Count rows per day for the last few weeks, then compare yesterday with the typical day. Use the median rather than the average, so one bad day does not drag the baseline with it. For the spread, use the median absolute deviation (MAD): how far a typical day sits from the median.</p>
+<pre class="code-block"><code>with daily as (
+  select date_trunc('day', loaded_at) as day, count(*) as n
+  from analytics.fct_orders
+  where loaded_at &gt;= current_date - 29
+    and loaded_at &lt; current_date - 1
+  group by 1
+),
+stats as (
+  select percentile_cont(0.5) within group (order by n) as median
+  from daily
+),
+spread as (
+  select percentile_cont(0.5) within group (order by abs(d.n - s.median)) as mad
+  from daily d cross join stats s
+),
+latest as (
+  select count(*) as n
+  from analytics.fct_orders
+  where loaded_at &gt;= current_date - 1
+    and loaded_at &lt; current_date
+)
+select l.n as yesterday, s.median, p.mad,
+       abs(l.n - s.median) &gt; 4 * greatest(p.mad, 1) as anomalous
+from latest l, stats s, spread p;</code></pre>
+  <p>Yesterday is counted separately, so a day with no rows at all still comes back as 0 and is flagged, rather than disappearing from the result. Flag a day that sits more than about four MADs from the median. That is wide enough to ignore ordinary noise and narrow enough to catch a half load or a doubled one. The <code>greatest(…, 1)</code> keeps a perfectly steady table from flagging a difference of a single row.</p>
+</section>
+
+<section id="weekly">
+  <h2>Weekly patterns</h2>
+  <p>If Mondays are always twice as busy as Sundays, comparing a Sunday with the median of all days will look like a drop every week. Compare with the same weekday instead: add <code>and extract(dow from loaded_at) = extract(dow from current_date - 1)</code> to the <code>daily</code> step, and widen the window to eight or ten weeks so there are enough samples.</p>
+  <p>Start with the plain version. Switch to same-weekday only for tables where the plain one actually cries wolf.</p>
+</section>
+
+<section id="window">
+  <h2>Choosing the window</h2>
+  <ul>
+    <li><b>Daily loads:</b> count by day, as above.</li>
+    <li><b>Hourly or streaming loads:</b> count by hour, and compare the last complete hour with the same hour on previous days.</li>
+    <li><b>Always use complete windows.</b> Counting today while today is still loading will look like a drop every morning.</li>
+    <li><b>Count by load time, not business time,</b> for the same reason as freshness: late-arriving rows move between days otherwise.</li>
+  </ul>
+</section>
+
+<section id="other">
+  <h2>Snowflake and BigQuery</h2>
+  <p>Snowflake supports <code>percentile_cont … within group</code> as written; use <code>dateadd(day, -1, current_date)</code> or keep the date arithmetic as shown. In BigQuery, use <code>timestamp_trunc(loaded_at, day)</code>, <code>date_sub(current_date(), interval 1 day)</code>, and <code>approx_quantiles(n, 2)[offset(1)]</code> for the median.</p>
+</section>
+
+<section id="nullwake">
+  <h2>Doing this with Nullwake</h2>
+  <p>Nullwake's volume check uses this median and MAD baseline over recent windows, so there is no row count to maintain. <code>tolerancePct</code> sets a minimum band around the median, so a very steady table does not alert on small changes:</p>
+<pre class="code-block"><code>volume: {column: loaded_at, windowHours: 24, tolerancePct: 50}</code></pre>
+  <p>When a window falls outside the expected range, it opens an incident for the owning team with the count and the expected range, and closes it when volume is back to normal. Try it in the <a href="https://app.nullwake.si/">live demo</a>, which simulates a partial load and a duplicate load on a schedule. Previous guide: <a href="/learn/freshness-checks">freshness</a>.</p>
+</section>
+</article>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <p class="foot-brand"><span class="logo"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="4"/><circle cx="16" cy="16" r="3.4" fill="currentColor"/></svg>nullwake</span> Data contracts that run inside your network.</p>
+    <p class="foot-links"><a href="mailto:hello@nullwake.si">hello@nullwake.si</a> <a href="/security">Security</a> <a href="/learn">Learn</a> <a href="https://app.nullwake.si/">Live demo</a> <a href="https://github.com/akhilp-prog/nullwake">GitHub</a></p>
+    <p class="privacy">This site sets no cookies, runs no JavaScript and loads nothing from other domains. Visits are logged with shortened IP addresses and deleted after 30 days.</p>
+  </div>
+</footer>
+</body>
+</html>
