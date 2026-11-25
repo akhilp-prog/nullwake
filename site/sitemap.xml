@@ -2,5 +2,7 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://nullwake.si/</loc><lastmod>2026-11-25</lastmod></url>
   <url><loc>https://nullwake.si/security</loc><lastmod>2026-11-25</lastmod></url>
+  <url><loc>https://nullwake.si/learn</loc><lastmod>2026-11-25</lastmod></url>
+  <url><loc>https://nullwake.si/learn/quiet-data-failures</loc><lastmod>2026-11-25</lastmod></url>
   <url><loc>https://nullwake.si/llms.txt</loc><lastmod>2026-11-25</lastmod></url>
 </urlset>

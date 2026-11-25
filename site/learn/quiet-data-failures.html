@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Silent data failures: 5 warehouse problems no test catches, and one SQL check for each</title>
+<meta name="description" content="Stale tables, partial loads, schema drift, null creep and duplicate loads break dashboards without raising an error. What each looks like and a SQL check for each, for Postgres, Snowflake and BigQuery.">
+<link rel="canonical" href="https://nullwake.si/learn/quiet-data-failures">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-96.png" type="image/png" sizes="96x96">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preload" href="/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/site.css">
+<meta name="theme-color" content="#10162B">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Nullwake">
+<meta property="og:url" content="https://nullwake.si/learn/quiet-data-failures">
+<meta property="og:title" content="Silent data failures: 5 warehouse problems no test catches, and one SQL check for each">
+<meta property="og:description" content="Stale tables, partial loads, schema drift, null creep and duplicate loads break dashboards without raising an error. What each looks like and a SQL check for each, for Postgres, Snowflake and BigQuery.">
+<meta property="og:image" content="https://nullwake.si/img/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@type": "TechArticle",
+ "headline": "Data that is wrong without anything failing",
+ "description": "Stale tables, partial loads, schema drift, null creep and duplicate loads break dashboards without raising an error. What each looks like and a SQL check for each, for Postgres, Snowflake and BigQuery.",
+ "datePublished": "2026-11-25",
+ "dateModified": "2026-11-25",
+ "url": "https://nullwake.si/learn/quiet-data-failures",
+ "image": "https://nullwake.si/img/og.png",
+ "author": {
+  "@type": "Person",
+  "name": "Akhil Pettem",
+  "url": "https://www.linkedin.com/in/akhil-p-8bbab842a/"
+ },
+ "publisher": {
+  "@type": "Organization",
+  "name": "Nullwake",
+  "url": "https://nullwake.si/",
+  "logo": {
+   "@type": "ImageObject",
+   "url": "https://nullwake.si/img/logo.png"
+  }
+ }
+}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero hero-page">
+  <nav class="nav wrap" aria-label="Main">
+    <a class="logo" href="/" aria-label="Nullwake home"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="4"/><circle cx="16" cy="16" r="3.4" fill="currentColor"/></svg>nullwake</a>
+    <ul>
+      <li><a href="/#how">How it works</a></li>
+      <li><a href="/security">Security</a></li>
+      <li><a href="/learn" aria-current="page">Learn</a></li>
+      <li><a href="/#pilot">Pilot</a></li>
+      <li><a href="/#about">About</a></li>
+    </ul>
+    <a class="nav-demo" href="https://app.nullwake.si/">Live demo</a>
+  </nav>
+  <div class="wrap page-head">
+    <p class="kicker"><a href="/learn">Learn</a> · Day 1 of 30 Days of Data Reliability</p>
+    <h1>Data that is wrong without anything failing</h1>
+    <p class="lede">The costliest data problems in a warehouse don&#x27;t raise an error. Here are the five that show up most often, what each looks like, and one SQL check that catches it.</p>
+    <p class="byline">By Akhil Pettem · 2026-11-25</p>
+  </div>
+</header>
+
+<main id="main" class="doc wrap">
+<nav class="toc" aria-label="On this page"><p>On this page</p><ol><li><a href="#why">Why nothing fails</a></li><li><a href="#stale">1. The table stopped updating</a></li><li><a href="#volume">2. The load ran, but half the rows are missing</a></li><li><a href="#schema">3. A column changed upstream</a></li><li><a href="#nulls">4. A key column started filling with NULLs</a></li><li><a href="#dupes">5. The same rows arrived twice</a></li><li><a href="#schedule">Run the checks on their own schedule</a></li><li><a href="#nullwake">Doing this with Nullwake</a></li></ol></nav>
+<article class="doc-body">
+<section id="why">
+  <h2>Why nothing fails</h2>
+  <p>A load stops overnight. Nothing errors. The dashboard still shows numbers, just yesterday's. Someone makes a decision on them before lunch, and the data team hears about it from the person who made it.</p>
+  <p>This happens because most pipeline monitoring answers one question: did the code run? Orchestrators report failed tasks. dbt reports failed tests. But a task that never started can't fail, and a dbt test only runs when dbt runs. If the problem is in the data rather than in the code, nothing turns red.</p>
+  <p>The fix is to check the data itself, on its own schedule, separately from the pipeline that loads it. Five checks cover most of what goes wrong.</p>
+  <p>The queries below are written for Postgres and tested on it. Snowflake runs them with small changes (use <code>count_if</code> instead of <code>filter</code>), and BigQuery needs its own date functions and <code>countif</code>; the checks themselves are the same.</p>
+</section>
+
+<section id="stale">
+  <h2>1. The table stopped updating</h2>
+  <p><b>What it looks like:</b> numbers that look normal but stop moving. A loader lost its credentials, an upstream export was paused, or a scheduler skipped a run.</p>
+  <p><b>Why it's missed:</b> no step fails. The load simply doesn't happen, so nothing downstream runs either.</p>
+  <p><b>The check:</b> compare the newest load timestamp with the current time.</p>
+<pre class="code-block"><code>select now() - max(loaded_at) as age
+from analytics.fct_orders;</code></pre>
+  <p>Alert when the age is larger than the load schedule plus some slack: a table loaded hourly might allow 90 minutes. Use the load timestamp, not a business date, because an order placed last week can arrive today. Treat timestamps in the future as a failure too: one bad row dated next month can hide a load that stopped yesterday.</p>
+</section>
+
+<section id="volume">
+  <h2>2. The load ran, but half the rows are missing</h2>
+  <p><b>What it looks like:</b> the table is fresh, but totals are low. An API paginated early, a file arrived truncated, or a filter changed upstream. The opposite happens too: a backfill runs twice and a day is doubled.</p>
+  <p><b>Why it's missed:</b> the freshness check passes, because rows did arrive.</p>
+  <p><b>The check:</b> count rows in the latest window and compare with recent windows.</p>
+<pre class="code-block"><code>with daily as (
+  select date_trunc('day', loaded_at) as day, count(*) as n
+  from analytics.fct_orders
+  where loaded_at &gt;= now() - interval '15 days'
+  group by 1
+)
+select
+  (select n from daily
+    where day = date_trunc('day', now() - interval '1 day')) as yesterday,
+  percentile_cont(0.5) within group (order by n) as typical
+from daily
+where day &lt; date_trunc('day', now() - interval '1 day');</code></pre>
+  <p>Compare with the median of recent windows rather than a fixed threshold. A fixed "alert below 10,000 rows" breaks on weekends, holidays and growth. The median also keeps one bad day from shifting the baseline, which an average would not.</p>
+</section>
+
+<section id="schema">
+  <h2>3. A column changed upstream</h2>
+  <p><b>What it looks like:</b> a team renames <code>customer_id</code> to <code>cust_id</code>, or changes an amount from a number to text. Their deploy goes fine. If your model selects <code>*</code> or joins loosely, the column quietly becomes NULL and every downstream number shifts.</p>
+  <p><b>Why it's missed:</b> many transformations don't fail on a missing column; they return NULL.</p>
+  <p><b>The check:</b> compare the columns the warehouse has with the columns you expect.</p>
+<pre class="code-block"><code>select column_name, data_type, is_nullable
+from information_schema.columns
+where table_schema = 'analytics'
+  and table_name = 'fct_orders'
+order by ordinal_position;</code></pre>
+  <p>Alert when a column you rely on is missing or has changed type. Keep the expected list in your repository, reviewed in pull requests. That list is a data contract with the team that sends you the data.</p>
+</section>
+
+<section id="nulls">
+  <h2>4. A key column started filling with NULLs</h2>
+  <p><b>What it looks like:</b> row counts are right and the schema is unchanged, but a join key or required field is suddenly empty for some rows. Usually a new code path upstream stopped setting it.</p>
+  <p><b>Why it's missed:</b> NULLs are valid values. Joins drop those rows silently, and sums come out lower without any error.</p>
+  <p><b>The check:</b></p>
+<pre class="code-block"><code>select count(*) filter (where customer_id is null) as null_keys
+from analytics.fct_orders
+where loaded_at &gt;= now() - interval '1 day';</code></pre>
+  <p>For columns that must never be empty, the threshold is zero. For optional columns, compare the null rate with its recent history the same way as volume.</p>
+</section>
+
+<section id="dupes">
+  <h2>5. The same rows arrived twice</h2>
+  <p><b>What it looks like:</b> revenue jumps, then someone finds every order from Tuesday counted twice. A retry, a replayed event stream or a backfill without a merge key.</p>
+  <p><b>Why it's missed:</b> the data looks plausible. Bigger numbers rarely trigger alarms on their own.</p>
+  <p><b>The check:</b></p>
+<pre class="code-block"><code>select count(*) - count(distinct order_id) as duplicates
+from analytics.fct_orders;</code></pre>
+  <p>On large tables, limit it to recent data, or check the key over the latest load window only.</p>
+</section>
+
+<section id="schedule">
+  <h2>Run the checks on their own schedule</h2>
+  <p>All five checks share one rule: they must run even when the pipeline doesn't. If they run as a step after the load, a load that never starts means checks that never start, and the first failure above slips straight through.</p>
+  <p>A practical starting point for a team with no data monitoring yet:</p>
+  <ul>
+    <li>Pick the five tables that decisions depend on: the ones behind your revenue, usage or operations dashboards.</li>
+    <li>Add freshness and volume checks to each. They catch most incidents.</li>
+    <li>Add a schema check to every table that another team sends you.</li>
+    <li>Send each alert to the team that owns the table, not to a shared channel everyone mutes.</li>
+    <li>Close the alert automatically when the data recovers, so the open list stays short and trusted.</li>
+  </ul>
+</section>
+
+<section id="nullwake">
+  <h2>Doing this with Nullwake</h2>
+  <p>Nullwake is an open-source tool that runs these checks for you. You describe each table's expectations in a short YAML data contract, and it checks Postgres, Snowflake and BigQuery on a schedule, opens an incident for the owning team when a check fails, and closes it when the data is healthy again. If you use dbt, it can draft the contracts from your existing tests. It runs inside your own network and reads only counts and aggregates.</p>
+  <p>The <a href="https://app.nullwake.si/">live demo</a> watches a simulated retail warehouse that breaks on a schedule, so you can watch each of the five failures above open and close an incident. It takes one click, with no sign-up.</p>
+</section>
+</article>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <p class="foot-brand"><span class="logo"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="4"/><circle cx="16" cy="16" r="3.4" fill="currentColor"/></svg>nullwake</span> Data contracts that run inside your network.</p>
+    <p class="foot-links"><a href="mailto:hello@nullwake.si">hello@nullwake.si</a> <a href="/security">Security</a> <a href="/learn">Learn</a> <a href="https://app.nullwake.si/">Live demo</a> <a href="https://github.com/akhilp-prog/nullwake">GitHub</a></p>
+    <p class="privacy">This site sets no cookies, runs no JavaScript and loads nothing from other domains. Visits are logged with shortened IP addresses and deleted after 30 days.</p>
+  </div>
+</footer>
+</body>
+</html>

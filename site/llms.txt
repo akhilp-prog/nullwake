@@ -30,6 +30,7 @@ The software is free and open source. A free 30-day pilot is offered to design p
 ## Pages
 
 - [Home](https://nullwake.si/): product overview, how it works, dbt import, pilot, FAQ
+- [Learn: guides to data reliability](https://nullwake.si/learn), starting with [Data that is wrong without anything failing](https://nullwake.si/learn/quiet-data-failures): stale tables, partial loads, schema drift, null creep and duplicate loads, with a SQL check for each
 - [Security and data handling](https://nullwake.si/security): what is read, what leaves the network, read-only roles for each warehouse
 - [Pilot guide](https://github.com/akhilp-prog/nullwake/blob/main/docs/pilot.md)
 - [Security design](https://github.com/akhilp-prog/nullwake/blob/main/docs/security.md)

@@ -290,3 +290,15 @@ main > .sec:first-child{border-top:0}
 .faq summary:focus-visible{outline:2px solid currentColor;outline-offset:4px}
 .faq details p{margin-top:.7rem;color:var(--muted);max-width:44rem}
 @media (prefers-reduced-motion:reduce){.faq summary::after{transition:none}}
+
+/* Learn */
+.page-head .kicker{color:var(--moon-dim);font-size:.95rem;margin-bottom:.9rem}
+.page-head .kicker a{color:var(--moon);text-decoration:underline;text-underline-offset:.2em}
+.page-head .byline{margin-top:1.1rem;color:var(--moon-dim);font-size:.9rem}
+.learn-list{padding-block:clamp(3rem,6vw,4.5rem) clamp(4rem,8vw,6rem)}
+.learn-list ul{list-style:none;padding:0;margin:0;max-width:46rem;border-top:1px solid var(--rule)}
+.learn-list li a{display:grid;gap:.35rem;padding:1.5rem 0;border-bottom:1px solid var(--rule);color:inherit;text-decoration:none}
+.learn-list li a:hover b,.learn-list li a:focus-visible b{text-decoration:underline;text-underline-offset:.18em}
+.learn-list .kicker{font-size:.85rem;color:var(--muted)}
+.learn-list b{font-size:1.35rem;line-height:1.2;letter-spacing:-.01em}
+.learn-list li a>span:last-child{color:var(--muted)}
