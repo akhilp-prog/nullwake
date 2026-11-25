@@ -5,6 +5,8 @@ scheduled freshness, volume, schema, null, uniqueness and custom-SQL checks agai
 contract breaks it opens an incident, tells the owning team, and closes the incident automatically once the
 data is healthy again.
 
+**Website: [nullwake.si](https://nullwake.si)** · **[Live demo](https://app.nullwake.si/)** (one click, read-only) · [Security and data handling](https://nullwake.si/security) · [hello@nullwake.si](mailto:hello@nullwake.si)
+
 ![Overview](docs/screenshots/overview.png)
 
 ## Why
@@ -183,18 +185,19 @@ export NULLWAKE_TEST_WAREHOUSE_DSN="host=localhost dbname=warehouse user=postgre
 pytest
 ```
 
-The suite (165 tests) runs against real Postgres: checks against live tables, read-only and timeout enforcement,
+The suite (168 tests) runs against real Postgres: checks against live tables, read-only and timeout enforcement,
 incident lifecycle, `SKIP LOCKED` claiming under contention, signed webhook delivery and retry, RBAC, CSRF/origin
 checks, throttling, and the CLI's CI exit codes.
 
 ## Status
 
-Version 0.6, running in production at app.nullwake.si (product site: [nullwake.si](https://nullwake.si)). Postgres is fully tested end to end. Snowflake is verified
+Version 0.7.1, running in production at [app.nullwake.si](https://app.nullwake.si/) (product site: [nullwake.si](https://nullwake.si)). Postgres is fully tested end to end. Snowflake is verified
 against a live Snowflake account (November 2026): all six check types pass on healthy data, and a planted duplicate
 order and negative amount are both caught, using a key-pair service user and a read-only role. Snowflake checks also
 run end to end in CI against the [fakesnow](https://github.com/tekumara/fakesnow) emulator. BigQuery is verified against a live project
 (November 2026) with a read-only service account (`bigquery.dataViewer` + `bigquery.jobUser`): 6/6 checks pass on
-healthy data and a planted duplicate and negative amount are both caught. Planned next: OIDC single sign-on, PagerDuty/Opsgenie channels, dbt `manifest.json` import to generate
-contracts, a Helm chart, and per-team routing.
+healthy data and a planted duplicate and negative amount are both caught. Contracts can be drafted from a dbt
+`manifest.json` (tested on dbt Labs' jaffle_shop). Planned next: OIDC single sign-on, PagerDuty/Opsgenie channels,
+a Helm chart, and per-team routing.
 
 Built by [Akhil Pettem](https://www.linkedin.com/in/akhil-p-8bbab842a/).
