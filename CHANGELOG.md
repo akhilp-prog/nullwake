@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.0 (2026-11-25)
+
+- OpenTelemetry: optional traces and metrics over OTLP/HTTP (SigNoz, Grafana, Honeycomb, Datadog, any Collector).
+  Each check run is a `nullwake.check` span with children for the warehouse query and the result write; alert
+  deliveries and web requests are traced; counters for runs, incidents and alert deliveries and a run-duration
+  histogram. Off unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set; `NULLWAKE_OTEL=false` forces it off. Spans carry names,
+  statuses and durations only, never check messages, values, SQL or credentials. New `otel` extra, included in the
+  Docker image. See docs/operations.md, "Traces and metrics".
+
 ## 0.7.1 (2026-11-25)
 
 - Demo mode: one-click "Enter the live demo" button on the sign-in page (`POST /demo`). It signs in only to the

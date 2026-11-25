@@ -52,6 +52,34 @@ least one of these, alerting through a channel that does not depend on Nullwake:
 Drill: `docker compose stop worker`, confirm the external alert arrives (within the lease + 180 s plus the monitor's
 own interval), then `docker compose start worker` and confirm it clears.
 
+### Traces and metrics (OpenTelemetry)
+
+Nullwake can export traces and metrics over OTLP/HTTP to SigNoz, Grafana Tempo/Mimir, Honeycomb, Datadog or any
+OpenTelemetry Collector. It is off until you set an endpoint in `.env`:
+
+```
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.internal:4318
+# SigNoz Cloud instead:  OTEL_EXPORTER_OTLP_ENDPOINT=https://ingest.<region>.signoz.cloud:443
+#                        OTEL_EXPORTER_OTLP_HEADERS=signoz-ingestion-key=<key>
+```
+
+Then `docker compose up -d`. The web and worker report as `nullwake-web` and `nullwake-worker`
+(`OTEL_SERVICE_NAME` overrides). The image includes the `otel` extra; for a pip install use `pip install
+"nullwake[otel]"`. `NULLWAKE_OTEL=false` keeps it off even when other software on the host sets `OTEL_*` variables.
+
+| Signal | Name | Attributes |
+| --- | --- | --- |
+| Span | `nullwake.check` (one per run), with children `nullwake.warehouse.query` and `nullwake.record_result` | check id, name and kind, dataset, connection, `db.system`, trigger, status, duration; error status when the check cannot run |
+| Span | `nullwake.alert.deliver` | channel name and type, event, attempt; error status when delivery fails |
+| Span | HTTP requests to the web app (health, metrics and static files excluded) | standard HTTP attributes |
+| Counter | `nullwake.check.runs` | status, kind, trigger |
+| Histogram | `nullwake.check.duration` (ms) | status, kind |
+| Counter | `nullwake.incidents` | event (`opened`/`resolved`), severity |
+| Counter | `nullwake.alert.deliveries` | outcome (`sent`/`error`), channel type |
+
+Spans never carry a check's message or value, query text, rows or credentials (see security.md, "What leaves the
+network"). The Prometheus endpoint `/metrics` keeps working alongside.
+
 ## Upgrades
 
 ```sh
@@ -171,3 +199,5 @@ are live immediately (the folder is mounted read-only); HTML and CSS are cached 
 | `NULLWAKE_CONTACT_NAME` / `_EMAIL` / `_LINKEDIN` / `_GITHUB` | unset | contact details shown on the sign-in page and footer |
 | `NULLWAKE_LOG_WAREHOUSE_ERRORS` | off | log raw warehouse error text (can quote data; debugging only) |
 | `NULLWAKE_LOG_LEVEL` | INFO | log level |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` / `_HEADERS` | unset | send traces and metrics over OTLP/HTTP (see Traces and metrics) |
+| `NULLWAKE_OTEL` | unset | `false` keeps OpenTelemetry off even if `OTEL_*` is set |

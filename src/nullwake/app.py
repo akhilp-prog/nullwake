@@ -13,7 +13,7 @@ from prometheus_client import CollectorRegistry, generate_latest
 from prometheus_client.exposition import CONTENT_TYPE_LATEST
 from sqlalchemy import func, select, text
 
-from . import __version__
+from . import __version__, telemetry
 from .api import router as api_router
 from .config import get_settings
 from .db import session_factory
@@ -49,6 +49,8 @@ def create_app() -> FastAPI:
     app.include_router(web_router)
     registry = CollectorRegistry()
     registry.register(NullwakeCollector())
+    if telemetry.setup("web"):
+        telemetry.instrument_app(app)
 
     @app.middleware("http")
     async def headers_and_logging(request: Request, call_next):

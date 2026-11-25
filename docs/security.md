@@ -32,6 +32,7 @@ Nullwake makes these outbound connections, and no others:
 | Your warehouse | Generated read-only queries; receives aggregates and column metadata | Always (a hosted warehouse such as Snowflake or BigQuery is outside your network) |
 | Each alert channel (Slack or your webhook URL) | The fields below | Only if you configure channels |
 | `NULLWAKE_DEADMAN_URL` | A plain GET with no body | Only if you set it |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` (OpenTelemetry) | Spans and metrics: check, contract, connection and dataset names, check kind, status, trigger, durations and counts. Never check messages or values, SQL, rows or credentials | Only if you set it |
 
 Each alert channel receives:
 

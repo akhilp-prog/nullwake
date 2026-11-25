@@ -28,6 +28,8 @@ import httpx
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 
+from . import telemetry
+
 from .alerts import deliver_due
 from .config import Settings
 from .db import session_factory
@@ -117,19 +119,39 @@ class _LeaseKeeper:
 def execute(monitor_id: int, settings: Settings, trigger: str = "schedule", claim: Claim | None = None) -> str | None:
     """Run one check and record the result. With a claim, the result is fenced by the claim's token, then the lease is
     released and the next run scheduled ("Run now" requests made during the run trigger an immediate rerun)."""
+    with telemetry.span("nullwake.check", **{"nullwake.check.id": monitor_id, "nullwake.trigger": trigger}) as sp:
+        outcome = _execute(monitor_id, settings, trigger, claim, sp)
+        sp.set("nullwake.outcome", outcome or "missing")
+        return outcome
+
+
+def _execute(monitor_id: int, settings: Settings, trigger: str, claim: Claim | None, sp) -> str | None:
     factory = session_factory()
     with factory() as session:
         monitor = session.get(Monitor, monitor_id)
         if monitor is None:
             return None
         spec = load_check(session, monitor)
+    for key, value in (("nullwake.check.name", spec.name), ("nullwake.check.kind", spec.kind),
+                       ("nullwake.dataset", spec.dataset), ("nullwake.connection", spec.connection_name),
+                       ("db.system", spec.connection_type)):
+        sp.set(key, value)
     # The metadata session is closed here: nothing is held open while the warehouse query runs.
-    if claim is not None:
-        with _LeaseKeeper(monitor_id, claim.token, settings.lease_seconds):
+    with telemetry.span("nullwake.warehouse.query", **{"db.system": spec.connection_type}) as q:
+        if claim is not None:
+            with _LeaseKeeper(monitor_id, claim.token, settings.lease_seconds):
+                result, duration, started = run_spec(spec, settings.query_timeout_seconds)
+        else:
             result, duration, started = run_spec(spec, settings.query_timeout_seconds)
-    else:
-        result, duration, started = run_spec(spec, settings.query_timeout_seconds)
-    with factory() as session:
+        if result.status == "error":
+            q.fail("check could not run")
+    sp.set("nullwake.check.status", result.status)
+    sp.set("nullwake.check.duration_ms", duration)
+    if result.status == "error":
+        sp.fail("check could not run")
+    telemetry.count("runs", status=result.status, kind=spec.kind, trigger=trigger)
+    telemetry.count("duration", duration, status=result.status, kind=spec.kind)
+    with factory() as session, telemetry.span("nullwake.record_result"):
         monitor = session.get(Monitor, monitor_id, with_for_update=True)
         if monitor is None:
             return None
@@ -212,6 +234,7 @@ def run_forever(settings: Settings, once: bool = False) -> None:
 
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
+    telemetry.setup("worker")
     worker_id = worker_identity()
     factory = session_factory()
     last_prune = 0.0

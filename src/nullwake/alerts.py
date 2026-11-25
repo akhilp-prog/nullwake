@@ -13,6 +13,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from . import telemetry
 from .models import AlertDelivery, IncidentEvent, utcnow
 
 log = logging.getLogger("nullwake.alerts")
@@ -81,8 +82,17 @@ def deliver_due(session: Session, client: httpx.Client, limit: int = 20) -> tupl
     for d in due:
         d.attempts += 1
         try:
-            send(d, client)
+            with telemetry.span("nullwake.alert.deliver", **{"nullwake.channel": d.channel.name,
+                                                             "nullwake.channel.type": d.channel.type,
+                                                             "nullwake.alert.event": d.event,
+                                                             "nullwake.alert.attempt": d.attempts}) as sp:
+                try:
+                    send(d, client)
+                except DeliveryError as exc:
+                    sp.fail(str(exc)[:120])
+                    raise
         except DeliveryError as exc:
+            telemetry.count("alerts", outcome="error", channel_type=d.channel.type)
             d.last_error = str(exc)[:500]
             if d.attempts >= MAX_ATTEMPTS:
                 d.status = "failed"
@@ -93,6 +103,7 @@ def deliver_due(session: Session, client: httpx.Client, limit: int = 20) -> tupl
                 d.next_attempt_at = utcnow() + timedelta(seconds=BASE_BACKOFF_SECONDS * 2 ** (d.attempts - 1))
             log.warning("alert delivery %s to %s failed: %s", d.id, d.channel.name, d.last_error)
             continue
+        telemetry.count("alerts", outcome="sent", channel_type=d.channel.type)
         d.status, d.last_error = "sent", ""
         sent += 1
         session.add(IncidentEvent(incident_id=d.incident_id, actor="nullwake", kind="alert_sent",

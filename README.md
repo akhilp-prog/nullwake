@@ -47,7 +47,8 @@ someone notices. Nullwake makes the producer's promises explicit and checks them
   (`NULLWAKE_DEADMAN_URL`) works as a dead man's switch and stops when any of those is unhealthy. A worker whose loop stalls exits and is restarted.
 - **CI gate.** `nullwake check contracts/` runs every contract directly against the warehouse and exits
   non-zero on failure. No server is needed, so it drops into GitHub Actions after `dbt build`.
-- **Operable.** `/healthz`, `/readyz` (database + migration state), Prometheus `/metrics`, JSON logs,
+- **Operable.** `/healthz`, `/readyz` (database + migration state), Prometheus `/metrics`, optional OpenTelemetry
+  traces and metrics for every check run (OTLP, works with SigNoz, Grafana or any Collector), JSON logs,
   Alembic migrations, audit log of every sign-in, config change, acknowledgement and token change.
 - **Access control.** Viewer / editor / admin roles, Argon2id passwords, hashed session and API tokens,
   CSRF and origin checks, sign-in throttling, strict Content-Security-Policy (the UI ships no JavaScript).
@@ -185,13 +186,13 @@ export NULLWAKE_TEST_WAREHOUSE_DSN="host=localhost dbname=warehouse user=postgre
 pytest
 ```
 
-The suite (168 tests) runs against real Postgres: checks against live tables, read-only and timeout enforcement,
+The suite (171 tests) runs against real Postgres: checks against live tables, read-only and timeout enforcement,
 incident lifecycle, `SKIP LOCKED` claiming under contention, signed webhook delivery and retry, RBAC, CSRF/origin
 checks, throttling, and the CLI's CI exit codes.
 
 ## Status
 
-Version 0.7.1, running in production at [app.nullwake.si](https://app.nullwake.si/) (product site: [nullwake.si](https://nullwake.si)). Postgres is fully tested end to end. Snowflake is verified
+Version 0.8.0, running in production at [app.nullwake.si](https://app.nullwake.si/) (product site: [nullwake.si](https://nullwake.si)). Postgres is fully tested end to end. Snowflake is verified
 against a live Snowflake account (November 2026): all six check types pass on healthy data, and a planted duplicate
 order and negative amount are both caught, using a key-pair service user and a read-only role. Snowflake checks also
 run end to end in CI against the [fakesnow](https://github.com/tekumara/fakesnow) emulator. BigQuery is verified against a live project

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nullwake"
-version = "0.7.1"
+version = "0.8.0"
 description = "Data reliability for teams that own production pipelines: data contracts, freshness, volume and schema monitoring, and incident response that runs inside your network."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -27,7 +27,13 @@ dependencies = [
 [project.optional-dependencies]
 snowflake = ["snowflake-connector-python>=3.10"]
 bigquery = ["google-cloud-bigquery>=3.25"]
-dev = ["pytest>=8", "fakesnow>=0.12", "snowflake-connector-python>=3.10,<4"]
+otel = [
+  "opentelemetry-sdk>=1.27",
+  "opentelemetry-exporter-otlp-proto-http>=1.27",
+  "opentelemetry-instrumentation-fastapi>=0.48b0",
+]
+dev = ["pytest>=8", "fakesnow>=0.12", "snowflake-connector-python>=3.10,<4", "opentelemetry-sdk>=1.27",
+       "opentelemetry-exporter-otlp-proto-http>=1.27", "opentelemetry-instrumentation-fastapi>=0.48b0"]
 
 [project.scripts]
 nullwake = "nullwake.cli:main"

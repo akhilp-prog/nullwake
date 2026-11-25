@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
+from . import telemetry
 from .connectors import ConnectorError, open_connector, raw_errors_logged
 from .contracts import Bundle
 from .models import (AlertChannel, AlertDelivery, AuditEntry, CheckRun, Connection, Contract, Incident,
@@ -225,6 +226,7 @@ def _update_incident(session: Session, monitor: Monitor, result: Result, public_
             session.add(IncidentEvent(incident_id=incident.id, at=now, actor="nullwake", kind="opened",
                                       message=result.message))
             enqueue_alerts(session, incident, monitor, "opened", result.message, public_url)
+            telemetry.count("incidents", event="opened", severity=monitor.severity)
         else:
             incident.failure_count += 1
             incident.last_seen_at = now
@@ -239,6 +241,7 @@ def _update_incident(session: Session, monitor: Monitor, result: Result, public_
         session.add(IncidentEvent(incident_id=incident.id, at=now, actor="nullwake", kind="resolved",
                                   message=f"Check passed: {result.message}"))
         enqueue_alerts(session, incident, monitor, "resolved", result.message, public_url)
+        telemetry.count("incidents", event="resolved", severity=monitor.severity)
 
 
 def enqueue_alerts(session: Session, incident: Incident, monitor: Monitor, event: str, message: str,
