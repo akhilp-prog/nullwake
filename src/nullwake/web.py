@@ -104,13 +104,11 @@ def login(request: Request, email: str = Form(..., max_length=254), password: st
     return response
 
 
-@router.post("/demo")
-def demo_login(request: Request, db: Session = Depends(get_db), settings: Settings = Depends(settings_dep)):
-    """One-click sign-in to the public demo. Exists only in demo mode, and only for a read-only (viewer) account."""
-    if not (settings.demo_mode and settings.demo_user and settings.demo_password):
-        raise HTTPException(404)
-    if request.headers.get("origin") != settings.origin:
-        raise HTTPException(403, "request origin could not be verified")
+def _demo_available(settings: Settings) -> bool:
+    return bool(settings.demo_mode and settings.demo_user and settings.demo_password)
+
+
+def _start_demo_session(request: Request, db: Session, settings: Settings):
     keys = [f"ip:{client_ip(request, settings)}"]
     if throttled(db, keys):
         return render(request, "login.html", None, 429, settings=settings,
@@ -120,12 +118,41 @@ def demo_login(request: Request, db: Session = Depends(get_db), settings: Settin
         record_failure(db, keys)
         return render(request, "login.html", None, 503, settings=settings,
                       error="The demo is not available right now. Try again in a few minutes.")
-    token, _ = create_session(db, user, min(settings.session_hours, 8))
+    hours = min(settings.session_hours, 8)
+    token, _ = create_session(db, user, hours)
     engine.audit(db, user.email, "auth.demo", "", ip=keys[0][3:])
     response = RedirectResponse("/", 303)
-    response.set_cookie(SESSION_COOKIE, token, max_age=min(settings.session_hours, 8) * 3600, httponly=True,
+    response.set_cookie(SESSION_COOKIE, token, max_age=hours * 3600, httponly=True,
                         secure=settings.secure_cookies, samesite="lax", path="/")
     return response
+
+
+@router.post("/demo")
+def demo_login(request: Request, db: Session = Depends(get_db), settings: Settings = Depends(settings_dep)):
+    """One-click sign-in to the public demo. Exists only in demo mode, and only for a read-only (viewer) account."""
+    if not _demo_available(settings):
+        raise HTTPException(404)
+    if request.headers.get("origin") != settings.origin:
+        raise HTTPException(403, "request origin could not be verified")
+    return _start_demo_session(request, db, settings)
+
+
+@router.get("/demo")
+def demo_link(request: Request, db: Session = Depends(get_db), settings: Settings = Depends(settings_dep),
+              principal: Principal | None = Depends(optional_principal)):
+    """A link that opens the demo dashboard directly, e.g. from the product site.
+
+    Signs in only on a navigation the person made (Sec-Fetch-User: ?1), so link previews, crawlers and embedded
+    requests get the sign-in page with its one-click button instead (307), and never replaces a session someone
+    already has. Only the read-only demo account can be reached this way, so a link from another site can at most
+    land a visitor in the public demo."""
+    if not _demo_available(settings):
+        raise HTTPException(404)
+    if principal is not None:
+        return RedirectResponse("/", 303 if principal.email == settings.demo_user else 307)
+    if request.headers.get("sec-fetch-user") != "?1" or request.headers.get("sec-fetch-dest", "document") != "document":
+        return RedirectResponse("/login", 307)
+    return _start_demo_session(request, db, settings)
 
 
 @router.post("/logout")

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.1 (2026-11-27)
+
+- Demo mode: `GET /demo` opens the demo dashboard directly from a link (for example the product site's "Live demo"
+  button). It signs in only on a navigation the person made (`Sec-Fetch-User: ?1`, `Sec-Fetch-Dest: document`), so
+  link previews, crawlers and embedded requests get the sign-in page instead (307), and it never replaces a session
+  someone already has. Only the read-only demo account can be reached this way. The Visitors page counts these entries.
+
 ## 0.8.0 (2026-11-25)
 
 - OpenTelemetry: optional traces and metrics over OTLP/HTTP (SigNoz, Grafana, Honeycomb, Datadog, any Collector).

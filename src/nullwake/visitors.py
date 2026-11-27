@@ -109,7 +109,8 @@ def compute(path: str, own_host: str, days: int = 30, now: datetime | None = Non
         if not agent or BOT.search(agent):
             stats.bots_ignored += 1
             continue
-        if not other_host and method == "POST" and uri in ("/login", "/demo") and status == 303:
+        if not other_host and status == 303 and ((method == "POST" and uri in ("/login", "/demo"))
+                                                  or (method == "GET" and uri == "/demo")):
             stats.demo_sign_ins += 1
             continue
         if method != "GET" or status >= 400 or uri.startswith(SKIP_PREFIXES) or ASSET.search(uri):

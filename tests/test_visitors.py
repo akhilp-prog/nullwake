@@ -114,3 +114,12 @@ def test_marketing_site_pages_are_kept_apart_from_app_pages(tmp_path):
     assert dict(s.pages) == {"nullwake.si/": 1, "/": 1}
     assert s.page_views == 2 and s.demo_sign_ins == 0
     assert dict(s.referrers) == {"linkedin.com": 1, "nullwake.si": 1}
+
+
+def test_direct_demo_link_counts_as_a_sign_in_but_its_fallback_does_not(tmp_path):
+    log = tmp_path / "access.log"
+    t = NOW - timedelta(hours=1)
+    log.write_text(line(t, "/demo", status=303) + line(t, "/demo", status=307) + line(t, "/demo", method="POST",
+                                                                                   status=303))
+    s = visitors.compute(str(log), "app.nullwake.si", days=30, now=NOW)
+    assert s.demo_sign_ins == 2
