@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.2 (2026-11-27)
+
+- Privacy: demo sign-ins no longer store the visitor's IP address in the audit log, and migration 0006 removes it
+  from earlier demo entries. Password sign-ins still record the IP as a security record.
+- `nullwake user EMAIL --delete` removes an account and its sessions, for erasure requests under GDPR or the DPDP Act.
+- docs/security.md: new "Personal data and privacy law" section (GDPR, DPDP Act, HIPAA) and retention for the proxy
+  log and failed sign-in counters.
+
 ## 0.8.1 (2026-11-27)
 
 - Demo mode: `GET /demo` opens the demo dashboard directly from a link (for example the product site's "Live demo"

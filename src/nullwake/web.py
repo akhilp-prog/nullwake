@@ -120,7 +120,7 @@ def _start_demo_session(request: Request, db: Session, settings: Settings):
                       error="The demo is not available right now. Try again in a few minutes.")
     hours = min(settings.session_hours, 8)
     token, _ = create_session(db, user, hours)
-    engine.audit(db, user.email, "auth.demo", "", ip=keys[0][3:])
+    engine.audit(db, user.email, "auth.demo", "")  # no IP: demo visitors stay anonymous
     response = RedirectResponse("/", 303)
     response.set_cookie(SESSION_COOKIE, token, max_age=hours * 3600, httponly=True,
                         secure=settings.secure_cookies, samesite="lax", path="/")

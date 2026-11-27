@@ -35,7 +35,7 @@ x-settings: &settings
 
 x-app: &app
   build: .
-  image: nullwake:${NULLWAKE_VERSION:-0.8.1}
+  image: nullwake:${NULLWAKE_VERSION:-0.8.2}
   restart: unless-stopped
   read_only: true
   tmpfs: [/tmp]

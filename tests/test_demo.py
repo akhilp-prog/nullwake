@@ -81,3 +81,15 @@ def test_demo_link_never_replaces_an_existing_session(demo_client, db):
 
 def test_demo_link_absent_outside_demo_mode(client, db):
     assert client.get("/demo", headers=CLICK, follow_redirects=False).status_code == 404
+
+
+def test_demo_sign_in_audit_keeps_no_ip(demo_client, db):
+    from sqlalchemy import select
+
+    from nullwake.models import AuditEntry
+    upsert_user(db, DEMO, "viewer", DEMO_PW)
+    db.commit()
+    assert demo_client.post("/demo", headers=ORIGIN, follow_redirects=False).status_code == 303
+    db.expire_all()
+    entry = db.scalars(select(AuditEntry).where(AuditEntry.action == "auth.demo")).one()
+    assert "ip" not in entry.detail

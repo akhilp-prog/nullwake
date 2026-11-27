@@ -173,6 +173,7 @@ are live immediately (the folder is mounted read-only); HTML and CSS are cached 
 | Task | Command |
 | --- | --- |
 | Reset a password / change role | `docker compose exec web nullwake user EMAIL --role editor` (revokes sessions) |
+| Delete a user (erasure request) | `docker compose exec web nullwake user EMAIL --delete` (removes their sessions; the audit log keeps history) |
 | Validate contracts without applying | `nullwake apply contracts/ --dry-run` |
 | Remove contracts deleted from Git | `nullwake apply contracts/ --prune` |
 | Run one contract now from CI | `nullwake check contracts/ --contract orders` |

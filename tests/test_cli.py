@@ -40,3 +40,7 @@ def test_apply_and_user_commands(tmp_path, capsys, monkeypatch):
     assert main(["user", "Ops@Example.com", "--role", "admin", "--password-stdin"]) == 0
     monkeypatch.setattr("sys.stdin", io.StringIO("short\n"))
     assert main(["user", "ops@example.com", "--role", "admin", "--password-stdin"]) == 2
+    assert main(["user", "ops@example.com", "--password-stdin"]) == 2  # role required to save
+    assert main(["user", "OPS@example.com", "--delete"]) == 0
+    assert "deleted ops@example.com" in capsys.readouterr().out
+    assert main(["user", "ops@example.com", "--delete"]) == 1

@@ -131,12 +131,36 @@ and BigQuery clients verify TLS certificates by default.
 | Check run history (status, one-line message, custom-SQL number) | metadata DB | viewers and above; alerts | `NULLWAKE_RETENTION_DAYS` (30); each check's latest result stays on the check |
 | Incidents and their events, audit log | metadata DB | incidents: viewers; audit: admins | incidents and audit are kept |
 | Alert deliveries (payload and status) | metadata DB | delivery status on the incident page (viewers) | kept with the incident; not pruned by retention |
-| Sign-in audit entries | metadata DB | admins | include the client IP |
-| Proxy access log | `access_logs` volume | admins (Visitors page) | client IPs masked to /24 (IPv4) or /48 (IPv6) |
+| Sign-in audit entries | metadata DB | admins | password sign-ins include the client IP; demo sign-ins (demo mode) record none |
+| Proxy access log | `access_logs` volume | admins (Visitors page) | client IPs masked to /24 (IPv4) or /48 (IPv6); files deleted after 30 days |
+| Failed sign-in counters | metadata DB | nobody (throttling only) | client IP or email, deleted after 15 minutes |
 
 Do not put secrets in YAML, including comments: viewers can read the applied source. Add a secret scanner (for
 example gitleaks) to the repository that holds your contracts. After a leak, re-apply the contract without the
 secret (the stored source is replaced), rotate the secret, and treat backups taken in between as containing it.
+
+### Personal data and privacy law (GDPR, DPDP Act, HIPAA)
+
+Nullwake is software you run, not a service. No data reaches the Nullwake project, so there is no processor or
+business-associate relationship with it, and no data processing agreement or BAA to sign. Your obligations stay
+with your own deployment, and Nullwake is built to keep them small:
+
+- **Warehouse data:** built-in checks read back aggregates (counts, ages, null and duplicate counts, column names and
+  types). Result rows are not copied, so personal data or protected health information (PHI) in your tables is not
+  stored in the metadata database or sent in alerts. Custom SQL checks return one number; review them so the
+  number cannot identify a person, and remember that table and column names appear in the UI and in alerts.
+- **Nullwake's own personal data:** user emails, Argon2 password hashes, session hashes, the audit log (actor email,
+  action, client IP for password sign-ins) and the masked proxy log. Set retention for these in your records of
+  processing; delete a departed user with `nullwake user EMAIL --delete` (their audit entries keep the email as history).
+- **Location and transfers:** data stays where you deploy it. Choose the region your regulator expects (for example
+  an Indian region for DPDP-sensitive data or an EU region for GDPR); the only outbound traffic is listed under
+  "What leaves the network".
+- **HIPAA:** Nullwake holds no PHI from checks, but HIPAA compliance is a property of your whole environment, not of a
+  tool. Run it on HIPAA-eligible infrastructure under your existing BAA, keep the access controls and audit log on,
+  and send alerts only to channels approved for your data.
+
+Nullwake has no certifications (SOC 2, ISO 27001, HITRUST). This section describes how the software behaves and is
+not legal advice.
 
 ## Application security
 
@@ -172,7 +196,7 @@ Throttling uses the TCP peer address unless `NULLWAKE_CLIENT_IP_HEADER` is set. 
 `X-Nullwake-Client` from the real peer address. Only set this variable when Nullwake is reachable *exclusively*
 through a proxy that overwrites the header.
 
-## Known limitations (v0.7)
+## Known limitations (v0.8)
 
 - Local accounts only; OIDC SSO is on the roadmap. Put Nullwake behind your identity-aware proxy if SSO is required today.
 - Single organization per deployment (no multi-tenancy).

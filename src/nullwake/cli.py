@@ -82,6 +82,11 @@ def cmd_worker_health(args) -> int:
 def cmd_user(args) -> int:
     from .db import session_scope
     from .security import upsert_user
+    if args.delete:
+        return _delete_user(args.email)
+    if not args.role:
+        print("error: --role is required unless --delete is given", file=sys.stderr)
+        return 2
     if args.password_stdin:
         password = sys.stdin.readline().rstrip("\n")
     else:
@@ -98,6 +103,25 @@ def cmd_user(args) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     print(f"saved {args.email.lower()} as {args.role}; existing sessions revoked")
+    return 0
+
+
+def _delete_user(email: str) -> int:
+    """Erase an account (for example a GDPR or DPDP erasure request). Sessions go with it; the audit log keeps history."""
+    from sqlalchemy import select
+
+    from .db import session_scope
+    from .engine import audit
+    from .models import User
+    email = email.strip().lower()
+    with session_scope() as db:
+        user = db.scalar(select(User).where(User.email == email))
+        if user is None:
+            print(f"error: no user {email}", file=sys.stderr)
+            return 1
+        db.delete(user)
+        audit(db, "cli", "user.delete", f"user/{email}")
+    print(f"deleted {email} and their sessions; API tokens they created are not revoked, check them in Settings")
     return 0
 
 
@@ -239,9 +263,10 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("worker-health", help="exit 0 if this host's worker reported in recently (container health)")
     p.add_argument("--max-age", type=int, default=0, help="seconds; default: the stall limit + 60")
     p.set_defaults(fn=cmd_worker_health)
-    p = sub.add_parser("user", help="create or update a user (resets password, revokes sessions)")
+    p = sub.add_parser("user", help="create or update a user (resets password, revokes sessions), or --delete one")
     p.add_argument("email")
-    p.add_argument("--role", choices=("viewer", "editor", "admin"), required=True)
+    p.add_argument("--role", choices=("viewer", "editor", "admin"))
+    p.add_argument("--delete", action="store_true", help="delete the user and their sessions")
     p.add_argument("--name")
     p.add_argument("--password-stdin", action="store_true", help="read the password from stdin")
     p.set_defaults(fn=cmd_user)
