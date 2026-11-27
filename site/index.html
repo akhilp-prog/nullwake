@@ -98,7 +98,7 @@
     "name": "Does any of our data leave our network?",
     "acceptedAnswer": {
      "@type": "Answer",
-     "text": "No. You run Nullwake inside your own network, on one VM or your container platform. It connects to your warehouse with a read-only role and its checks read only counts and aggregates, never rows of data. Credentials stay in your environment. The security page has the details for a security review."
+     "text": "No. You run Nullwake inside your own network, on one VM or your container platform. It connects to your warehouse with a read-only role and its built-in checks read back only counts and aggregates, and a custom SQL check returns a single number, so no rows of data are copied. Credentials stay in your environment. The security page has the details for a security review."
     }
    },
    {
@@ -158,12 +158,13 @@
 
   <div class="wrap hero-copy">
     <h1>Know your data broke before anyone opens the dashboard.</h1>
-    <p class="lede">Nullwake watches the tables your dashboards, reports and models depend on. When one goes stale, shrinks, changes shape or breaks a business rule, the team that owns it hears first, before anyone reads a wrong number. It runs inside your network, reads only counts, and is open source.</p>
+    <p class="lede">Nullwake watches the tables your dashboards, reports and models depend on. When one goes stale, shrinks, changes shape or breaks a business rule, the team that owns it hears first, before anyone reads a wrong number. It runs inside your network, its built-in checks read back counts rather than rows, and it is open source.</p>
     <div class="hero-act">
       <p class="ctas">
-        <a class="btn btn-primary" href="mailto:hello@nullwake.si?subject=Nullwake%20pilot">Book a pilot call</a>
+        <a class="btn btn-primary" href="mailto:hello@nullwake.si?subject=Nullwake%20pilot">Request a free pilot</a>
         <a class="btn btn-ghost" href="https://app.nullwake.si/demo">Open the live demo (no sign-up)</a>
       </p>
+      <p class="works">On dbt? <a href="#dbt">Try it on one model of your project</a>, on your own machine.</p>
       <p class="works">Works with Postgres, Snowflake and BigQuery. Open source under Apache 2.0.</p>
     </div>
   </div>
@@ -504,7 +505,7 @@
   </div>
   <div class="sec-body">
     <svg class="boundary boundary-h" viewBox="0 0 680 270" role="img" aria-labelledby="bnd-t">
-      <title id="bnd-t">Inside your network, Nullwake queries your warehouse through a read-only role and receives only counts and aggregates. The only traffic that leaves is alerts to Slack or your webhook.</title>
+      <title id="bnd-t">Inside your network, Nullwake queries your warehouse through a read-only role and receives counts and single numbers, never rows. The only traffic that leaves is alerts to Slack or your webhook.</title>
       <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" class="ah"/></marker></defs>
       <rect class="net" x="2" y="22" width="476" height="246" rx="14"/>
       <text class="net-l" x="20" y="14">Your network</text>
@@ -527,7 +528,7 @@
       <text class="al" x="520" y="128" text-anchor="middle">alerts</text>
     </svg>
     <svg class="boundary boundary-v" viewBox="0 0 340 430" role="img" aria-labelledby="bnd-t2">
-      <title id="bnd-t2">Inside your network, Nullwake queries your warehouse through a read-only role and receives only counts and aggregates. The only traffic that leaves is alerts to Slack or your webhook.</title>
+      <title id="bnd-t2">Inside your network, Nullwake queries your warehouse through a read-only role and receives counts and single numbers, never rows. The only traffic that leaves is alerts to Slack or your webhook.</title>
       <defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" class="ah"/></marker></defs>
       <rect class="net" x="2" y="24" width="336" height="300" rx="14"/>
       <text class="net-l" x="16" y="15">Your network</text>
@@ -559,7 +560,7 @@
 
 <section class="sec wrap" id="honest" aria-labelledby="honest-h">
   <div class="sec-head">
-    <h2 id="honest-h">Built never to show a false green</h2>
+    <h2 id="honest-h">How it avoids a false all-clear</h2>
     <p>A monitor that says “passing” while the data is broken is worse than no monitor. Each of these came out of an external review and is covered by a regression test.</p>
   </div>
   <ul class="proof">
@@ -574,14 +575,14 @@
 
 <section class="sec wrap" id="dbt" aria-labelledby="dbt-h">
   <div class="sec-head">
-    <h2 id="dbt-h">Already on dbt? Send me your manifest</h2>
+    <h2 id="dbt-h">Already on dbt? Try it on one model</h2>
     <p>Your dbt tests already describe what good data looks like. Nullwake turns them into checks that run on a schedule and alert when the data breaks, not only when someone runs a build.</p>
   </div>
   <div class="how">
     <ol class="steps">
       <li><h3>Run <code>dbt parse</code></h3><p>It writes <code>target/manifest.json</code>. The file holds your model code, column names and test definitions. It contains no rows of data.</p></li>
-      <li><h3>Email it to me</h3><p>Send it to <a href="mailto:hello@nullwake.si?subject=dbt%20manifest">hello@nullwake.si</a>, or a trimmed copy your team has approved. If it has to stay internal, run <code>nullwake init --dbt</code> yourself: it is open source and runs on your machine.</p></li>
-      <li><h3>Get contracts back within a day</h3><p><code>unique</code> and <code>not_null</code> become column rules, <code>accepted_values</code> and <code>relationships</code> become SQL checks, source freshness becomes the freshness check and <code>meta.owner</code> becomes the owner. I note anything that needs your decision.</p></li>
+      <li><h3>Draft contracts on your machine</h3><p>Install Nullwake with pip and run <code>nullwake init --dbt target/manifest.json --select orders</code> with a read-only warehouse login. Nothing is sent anywhere. <code>unique</code> and <code>not_null</code> become column rules, <code>accepted_values</code> and <code>relationships</code> become SQL checks, source freshness becomes the freshness check and <code>meta.owner</code> becomes the owner.</p></li>
+      <li><h3>Run the checks, or ask me to</h3><p><code>nullwake check</code> runs every drafted check once and shows what fails. Rather have me do it? Email a manifest your team has approved for sharing to <a href="mailto:hello@nullwake.si?subject=dbt%20manifest">hello@nullwake.si</a>; it holds model code and test definitions but no rows. You get contracts back within a day.</p></li>
     </ol>
     <div class="code" role="region" aria-label="nullwake init on dbt Labs' jaffle_shop">
       <div class="code-bar">Tested on dbt Labs’ jaffle_shop, with one bad order inserted</div>
@@ -598,7 +599,7 @@
 <span class="dim">      1 order has a status outside the allowed list</span></code></pre>
     </div>
   </div>
-  <p class="ctas"><a class="btn btn-primary" href="mailto:hello@nullwake.si?subject=dbt%20manifest">Send your manifest</a></p>
+  <p class="ctas"><a class="btn btn-primary" href="https://github.com/akhilp-prog/nullwake#try-it-on-your-dbt-project">See the install steps</a> <a class="btn btn-ghost-light" href="mailto:hello@nullwake.si?subject=dbt%20manifest">Email a manifest instead</a></p>
 </section>
 
 <section class="pilot" id="pilot" aria-labelledby="pilot-h">
@@ -635,7 +636,7 @@
   <div class="faq">
     <details open><summary>What is Nullwake?</summary><p>Nullwake is an open-source data reliability and data quality monitoring tool. You describe what healthy data looks like in YAML data contracts (freshness, row volume, schema, nulls, duplicates and your own SQL rules). Nullwake runs those checks on a schedule against Postgres, Snowflake or BigQuery, opens an incident when one fails, alerts the team that owns the table, and closes the incident once the data is healthy again.</p></details>
     <details><summary>Is Nullwake free and open source?</summary><p>Yes. The software is open source under the Apache 2.0 licence and the code is on <a href="https://github.com/akhilp-prog/nullwake">GitHub</a>. Companies that want setup help, support and priority fixes can take a yearly subscription after a free 30-day pilot.</p></details>
-    <details><summary>Does any of our data leave our network?</summary><p>No. You run Nullwake inside your own network, on one VM or your container platform. It connects to your warehouse with a read-only role and its checks read only counts and aggregates, never rows of data. Credentials stay in your environment. The <a href="/security">security page</a> has the details for a security review.</p></details>
+    <details><summary>Does any of our data leave our network?</summary><p>No. You run Nullwake inside your own network, on one VM or your container platform. It connects to your warehouse with a read-only role and its built-in checks read back only counts and aggregates, and a custom SQL check returns a single number, so no rows of data are copied. Credentials stay in your environment. The <a href="/security">security page</a> has the details for a security review.</p></details>
     <details><summary>Which warehouses does it support?</summary><p>Postgres 14 or later, Snowflake and BigQuery. All six check types have been verified against live Snowflake and BigQuery accounts with planted defects.</p></details>
     <details><summary>We already use dbt tests. Why add Nullwake?</summary><p>dbt tests only run when someone runs dbt. If a load silently stops, nothing runs and nothing fails. Nullwake imports your existing dbt tests from <code>manifest.json</code>, runs them on their own schedule, adds freshness and volume checks, and turns failures into incidents with an owner, alerts and a history.</p></details>
     <details><summary>How is it different from Monte Carlo, Soda or Elementary?</summary><p>Monte Carlo is a commercial, hosted data observability platform. Soda Core and Elementary are open-source frameworks that run checks as part of your pipelines or dbt runs. Nullwake is a self-hosted service of its own: it keeps checking on a schedule whether or not pipelines run, and handles incidents, ownership and alerts, while staying read-only inside your network.</p></details>

@@ -50,6 +50,10 @@ p{margin:0}
 .btn-primary:hover{background:#5B54F0;color:#fff}
 .btn-ghost{border:1px solid var(--night-line);color:#fff}
 .btn-ghost:hover{border-color:var(--lilac);color:#fff}
+.btn-ghost-light{border:1px solid var(--rule);color:var(--ink);background:var(--white)}
+.btn-ghost-light:hover{border-color:var(--indigo);color:var(--indigo-deep)}
+.works a{color:var(--lilac);text-underline-offset:.2em}
+.works a:hover{color:#fff}
 .works{margin-top:1.25rem;font-size:.95rem;color:var(--moon-dim)}
 
 /* the night-watch timeline */

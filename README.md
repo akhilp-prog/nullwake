@@ -103,12 +103,20 @@ Columns, types, NOT NULL and declared primary keys come from the warehouse. A lo
 `ingested_at`, `created_at`, ...) becomes the freshness and volume check. Limits only your team knows, such as how late
 is too late, are marked TODO with conservative defaults.
 
-Already on dbt? Point `init` at your manifest and the rules you wrote in dbt carry over:
+### Try it on your dbt project
+
+Already on dbt? Point `init` at your manifest and the rules you wrote in dbt carry over. Everything runs on your
+machine with a read-only warehouse login; nothing is sent anywhere. Start with one model:
 
 ```sh
+pip install "nullwake[snowflake] @ git+https://github.com/akhilp-prog/nullwake"   # or [bigquery]; Postgres needs no extra
 dbt parse                                                                       # writes target/manifest.json
-nullwake init connection.yaml --dbt target/manifest.json --select tag:finance
+nullwake init connection.yaml --dbt target/manifest.json --select orders        # one model; tag:finance for a group
+nullwake check connection.yaml contracts/                                       # run the drafted checks once
 ```
+
+`connection.yaml` names an environment variable that holds your read-only DSN or key path (see
+[`examples/`](examples)), never the secret itself.
 
 `unique` and `not_null` tests become column rules, `accepted_values` and `relationships` tests become SQL checks, `unique_combination_of_columns` and an incremental model's
 `unique_key` become the contract's key, a source's `loaded_at_field` and `freshness.error_after` become the freshness
