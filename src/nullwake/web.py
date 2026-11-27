@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from . import __version__, engine
@@ -97,7 +97,11 @@ def login(request: Request, email: str = Form(..., max_length=254), password: st
         record_failure(db, keys)
         return render(request, "login.html", None, 401, settings=settings, error="Email or password is incorrect.")
     token, _ = create_session(db, user, settings.session_hours)
-    engine.audit(db, user.email, "auth.login", "", ip=keys[0][3:])
+    if _is_demo_user(settings, user.email):
+        engine.audit(db, user.email, "auth.login", "")  # demo visitors stay anonymous
+        _forget_demo_ips(db, settings)
+    else:
+        engine.audit(db, user.email, "auth.login", "", ip=keys[0][3:])
     response = RedirectResponse("/", 303)
     response.set_cookie(SESSION_COOKIE, token, max_age=settings.session_hours * 3600, httponly=True,
                         secure=settings.secure_cookies, samesite="lax", path="/")
@@ -106,6 +110,16 @@ def login(request: Request, email: str = Form(..., max_length=254), password: st
 
 def _demo_available(settings: Settings) -> bool:
     return bool(settings.demo_mode and settings.demo_user and settings.demo_password)
+
+
+def _is_demo_user(settings: Settings, email: str) -> bool:
+    return bool(settings.demo_mode and settings.demo_user and email == settings.demo_user.strip().lower())
+
+
+def _forget_demo_ips(db: Session, settings: Settings) -> None:
+    """Strip any IP left on the demo account's audit entries (for example from before demo sign-ins were anonymous)."""
+    db.execute(text("UPDATE audit_log SET detail = detail - 'ip' WHERE actor = :u AND detail ? 'ip'"),
+               {"u": settings.demo_user.strip().lower()})
 
 
 def _start_demo_session(request: Request, db: Session, settings: Settings):
@@ -121,6 +135,7 @@ def _start_demo_session(request: Request, db: Session, settings: Settings):
     hours = min(settings.session_hours, 8)
     token, _ = create_session(db, user, hours)
     engine.audit(db, user.email, "auth.demo", "")  # no IP: demo visitors stay anonymous
+    _forget_demo_ips(db, settings)
     response = RedirectResponse("/", 303)
     response.set_cookie(SESSION_COOKIE, token, max_age=hours * 3600, httponly=True,
                         secure=settings.secure_cookies, samesite="lax", path="/")

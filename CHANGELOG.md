@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.3 (2026-11-27)
+
+- Privacy: a password sign-in to the demo account (demo mode) is also recorded without an IP address, and each demo
+  sign-in removes any IP still stored on the demo account's audit entries from earlier versions. Other accounts keep
+  the IP on their sign-ins.
+
 ## 0.8.2 (2026-11-27)
 
 - Privacy: demo sign-ins no longer store the visitor's IP address in the audit log, and migration 0006 removes it

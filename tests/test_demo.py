@@ -93,3 +93,21 @@ def test_demo_sign_in_audit_keeps_no_ip(demo_client, db):
     db.expire_all()
     entry = db.scalars(select(AuditEntry).where(AuditEntry.action == "auth.demo")).one()
     assert "ip" not in entry.detail
+
+
+def test_demo_password_sign_in_is_anonymous_and_clears_old_ips(demo_client, db):
+    from sqlalchemy import select
+
+    from nullwake import engine
+    from nullwake.models import AuditEntry
+    upsert_user(db, DEMO, "viewer", DEMO_PW)
+    engine.audit(db, DEMO, "auth.login", "", ip="203.0.113.9")  # left over from an older version
+    engine.audit(db, "admin@example.com", "auth.login", "", ip="198.51.100.7")
+    db.commit()
+    r = demo_client.post("/login", data={"email": DEMO, "password": DEMO_PW}, headers=ORIGIN, follow_redirects=False)
+    assert r.status_code == 303
+    db.expire_all()
+    demo_entries = db.scalars(select(AuditEntry).where(AuditEntry.actor == DEMO)).all()
+    assert len(demo_entries) == 2 and all("ip" not in e.detail for e in demo_entries)
+    admin = db.scalars(select(AuditEntry).where(AuditEntry.actor == "admin@example.com")).one()
+    assert admin.detail["ip"] == "198.51.100.7"  # real accounts keep their security record
