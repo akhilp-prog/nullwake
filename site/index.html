@@ -158,7 +158,7 @@
 
   <div class="wrap hero-copy">
     <h1>Know your data broke before anyone opens the dashboard.</h1>
-    <p class="lede">Nullwake checks your warehouse tables against data contracts written in YAML. When a table goes stale, shrinks, changes shape or breaks a business rule, it opens an incident, alerts the team that owns it, and closes the incident once the data is healthy again. It runs inside your network and reads only counts and aggregates.</p>
+    <p class="lede">Nullwake watches the tables your dashboards, reports and models depend on. When one goes stale, shrinks, changes shape or breaks a business rule, the team that owns it hears first, before anyone reads a wrong number. It runs inside your network, reads only counts, and is open source.</p>
     <div class="hero-act">
       <p class="ctas">
         <a class="btn btn-primary" href="mailto:hello@nullwake.si?subject=Nullwake%20pilot">Book a pilot call</a>
@@ -373,6 +373,71 @@
 </header>
 
 <main id="main">
+
+<section class="sec wrap" id="fits" aria-labelledby="fits-h">
+  <div class="sec-head">
+    <h2 id="fits-h">Where it fits</h2>
+    <p>Your pipelines load data into the warehouse, and your dashboards and models read from it. Nullwake sits beside the warehouse and checks the tables in between, so a broken table reaches its owner before it reaches a meeting.</p>
+  </div>
+  <div class="sec-body">
+    <svg class="boundary fits-h" viewBox="0 0 680 290" role="img" aria-labelledby="fits-t">
+      <title id="fits-t">Pipelines load your warehouse and dashboards read from it. Nullwake checks the warehouse tables on a schedule through a read-only role and alerts the owning team in Slack when a table breaks.</title>
+      <defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" class="ah"/></marker></defs>
+      <rect class="box" x="4" y="30" width="172" height="92" rx="10"/>
+      <text class="bt" x="90" y="66" text-anchor="middle">Pipelines</text>
+      <text class="bs" x="90" y="88" text-anchor="middle">dbt, Airflow, Fivetran</text>
+      <text class="bs" x="90" y="106" text-anchor="middle">or your own jobs</text>
+      <path class="ln" d="M178 76 H248" marker-end="url(#ah2)"/>
+      <rect class="box" x="252" y="30" width="176" height="92" rx="10"/>
+      <text class="bt" x="340" y="66" text-anchor="middle">Your warehouse</text>
+      <text class="bs" x="340" y="88" text-anchor="middle">Postgres, Snowflake</text>
+      <text class="bs" x="340" y="106" text-anchor="middle">or BigQuery</text>
+      <path class="ln" d="M430 76 H500" marker-end="url(#ah2)"/>
+      <rect class="box" x="504" y="30" width="172" height="92" rx="10"/>
+      <text class="bt" x="590" y="66" text-anchor="middle">Dashboards</text>
+      <text class="bs" x="590" y="88" text-anchor="middle">reports and models</text>
+      <text class="bs" x="590" y="106" text-anchor="middle">that people trust</text>
+      <rect class="box nw" x="252" y="196" width="176" height="84" rx="10"/>
+      <text class="bt nwt" x="340" y="232" text-anchor="middle">Nullwake</text>
+      <text class="bs nws" x="340" y="254" text-anchor="middle">checks every table</text>
+      <path class="ln" d="M340 194 V126" marker-end="url(#ah2)"/>
+      <text class="al" x="350" y="160">read-only, counts only</text>
+      <path class="ln out" d="M430 238 H500" marker-end="url(#ah2)"/>
+      <rect class="box ext" x="504" y="200" width="172" height="76" rx="10"/>
+      <text class="bt" x="590" y="232" text-anchor="middle">Owner's Slack</text>
+      <text class="bs" x="590" y="254" text-anchor="middle">"orders is 3 h stale"</text>
+    </svg>
+    <svg class="boundary fits-v" viewBox="0 0 340 300" role="img" aria-labelledby="fits-t2">
+      <title id="fits-t2">Pipelines load your warehouse and dashboards read from it. Nullwake checks the warehouse tables through a read-only role and alerts the owning team in Slack.</title>
+      <defs><marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" class="ah"/></marker></defs>
+      <rect class="box" x="2" y="2" width="170" height="66" rx="10"/>
+      <text class="bt" x="87" y="31" text-anchor="middle">Pipelines</text>
+      <text class="bs" x="87" y="51" text-anchor="middle">dbt, Airflow, Fivetran</text>
+      <path class="ln" d="M87 70 V100" marker-end="url(#ah3)"/>
+      <rect class="box" x="2" y="104" width="170" height="80" rx="10"/>
+      <text class="bt" x="87" y="137" text-anchor="middle">Your warehouse</text>
+      <text class="bs" x="87" y="157" text-anchor="middle">Postgres, Snowflake</text>
+      <text class="bs" x="87" y="173" text-anchor="middle">or BigQuery</text>
+      <path class="ln" d="M87 186 V216" marker-end="url(#ah3)"/>
+      <rect class="box" x="2" y="220" width="170" height="70" rx="10"/>
+      <text class="bt" x="87" y="250" text-anchor="middle">Dashboards</text>
+      <text class="bs" x="87" y="270" text-anchor="middle">and reports</text>
+      <rect class="box nw" x="200" y="104" width="138" height="80" rx="10"/>
+      <text class="bt nwt" x="269" y="140" text-anchor="middle">Nullwake</text>
+      <text class="bs nws" x="269" y="160" text-anchor="middle">read-only</text>
+      <path class="ln" d="M198 144 H176" marker-end="url(#ah3)"/>
+      <path class="ln out" d="M269 186 V216" marker-end="url(#ah3)"/>
+      <rect class="box ext" x="200" y="220" width="138" height="70" rx="10"/>
+      <text class="bt" x="269" y="250" text-anchor="middle">Owner's</text>
+      <text class="bt" x="269" y="270" text-anchor="middle">Slack</text>
+    </svg>
+    <ul class="fits-points">
+      <li><b>Wrong numbers stop reaching people.</b> A stale or broken table alerts its owner within minutes, not when someone asks why revenue dropped.</li>
+      <li><b>Every table has a named owner.</b> Each contract says who owns the table, so an alert goes to one team instead of a channel everyone ignores.</li>
+      <li><b>Nothing leaves your network.</b> Self-hosted, read-only and open source, so your security team can read every line it runs.</li>
+    </ul>
+  </div>
+</section>
 
 <section class="sec wrap" id="catches" aria-labelledby="catches-h">
   <div class="sec-head">

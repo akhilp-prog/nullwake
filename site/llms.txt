@@ -7,7 +7,7 @@ Source code: https://github.com/akhilp-prog/nullwake
 Live demo: https://app.nullwake.si/demo (one click, read-only, no sign-up)
 Contact: hello@nullwake.si
 Built by: Akhil Pettem, data engineer, Bengaluru, India
-Current version: 0.8.2 (November 2026)
+Current version: 0.8.4 (November 2026)
 
 ## What it does
 
