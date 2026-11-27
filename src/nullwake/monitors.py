@@ -34,9 +34,13 @@ def human_minutes(minutes: float) -> str:
 
 
 def check_freshness(conn: Connector, dataset: str, params: dict, state: dict) -> Result:
-    age, count = conn.row(conn.dialect.freshness_sql(dataset, params["column"]))
+    scan = params.get("scanHours")
+    age, count = conn.row(conn.dialect.freshness_sql(dataset, params["column"], scan))
     limit = float(params["maxAgeMinutes"])
     if not count or age is None:
+        if scan:
+            return Result("fail", f"No rows in {dataset} in the last {scan} h; contract allows "
+                          f"{human_minutes(limit)}", None, {"rows": 0, "scanHours": scan})
         return Result("fail", f"{dataset} has no rows with {params['column']} set", None, {"rows": count or 0})
     skew = float(params.get("maxFutureSkewMinutes", 5))
     if _num(age) < -skew * 60:

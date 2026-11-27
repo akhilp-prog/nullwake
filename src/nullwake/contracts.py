@@ -235,11 +235,16 @@ def parse_contract(doc: dict, where: str, source_yaml: str, connection_types: di
     if fresh is not None:
         fw = f"{where}.spec.freshness"
         _req(fresh, "maxAgeMinutes", fw, None)
-        add("freshness", "freshness", {
+        params = {
             "column": _ident(_req(fresh, "column", fw), f"{fw}.column").lower(),
             "maxAgeMinutes": _num(fresh, "maxAgeMinutes", fw, 0, 1, 525600),
             "maxFutureSkewMinutes": _num(fresh, "maxFutureSkewMinutes", fw, 5, 0, 1440),
-        }, _severity(fresh, fw, "critical"))
+        }
+        if fresh.get("scanHours") is not None:
+            params["scanHours"] = _num(fresh, "scanHours", fw, 0, 1, 8760)
+            if params["scanHours"] * 60 < params["maxAgeMinutes"]:
+                raise ContractError(f"{fw}.scanHours: must cover maxAgeMinutes, or a late table reads as empty")
+        add("freshness", "freshness", params, _severity(fresh, fw, "critical"))
 
     vol = spec.get("volume")
     if vol is not None:

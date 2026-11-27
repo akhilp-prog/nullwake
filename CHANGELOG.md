@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.4 (2026-11-27)
+
+- Freshness checks take an optional `scanHours`: only rows from that many recent hours are read, so on a large
+  partitioned BigQuery or Snowflake table the check scans recent partitions instead of the whole column. With no
+  rows in that window the check fails and says so. `scanHours` must cover `maxAgeMinutes`.
+- Demo: `NULLWAKE_DEMO_LIVE_DATA=true` also applies `demo/live/ethereum.yaml`, which monitors Google's public
+  Ethereum datasets in BigQuery (freshness, hourly volume, missing or duplicate blocks, transactions against block
+  counts, and agreement between the two datasets).
+
 ## 0.8.3 (2026-11-27)
 
 - Privacy: a password sign-in to the demo account (demo mode) is also recorded without an IP address, and each demo

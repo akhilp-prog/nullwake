@@ -1,0 +1,115 @@
+# Live public data for the hosted demo: Google's public Ethereum datasets in BigQuery, which update continuously.
+# Applied by demo/bootstrap.sh only when NULLWAKE_DEMO_LIVE_DATA=true. Every check reads recent partitions only,
+# and each query is capped at 2 GB scanned. Queries are billed to the demo's own project.
+apiVersion: nullwake/v1
+kind: Connection
+metadata:
+  name: ethereum-public
+spec:
+  type: bigquery
+  project: nullwake-prod-48213        # billing project for the queries; the data is bigquery-public-data
+  maximumBytesBilled: 2147483648      # 2 GiB cap per check query
+---
+apiVersion: nullwake/v1
+kind: DataContract
+metadata:
+  name: eth_blocks
+  owner: blockchain-etl@public-dataset.example
+  description: >
+    Ethereum blocks in the community dataset bigquery-public-data.crypto_ethereum (Blockchain ETL).
+    A new block every 12 seconds, so about 300 an hour. Checks: new blocks keep arriving, the hourly
+    count is normal, and no block number is missing or loaded twice.
+spec:
+  connection: ethereum-public
+  dataset: bigquery-public-data.crypto_ethereum.blocks
+  schedule: {intervalMinutes: 15}
+  schema:
+    allowAdditionalColumns: true
+    columns:
+      - {name: timestamp, type: timestamp}
+      - {name: number, type: int64}
+      - {name: hash, type: string}
+      - {name: miner, type: string}
+      - {name: transaction_count, type: int64}
+      - {name: gas_used, type: int64}
+  freshness: {column: timestamp, maxAgeMinutes: 30, scanHours: 6, severity: critical}
+  volume: {column: timestamp, windowHours: 1, lookbackWindows: 24, tolerancePct: 15, minRows: 200}
+  checks:
+    - name: no_missing_block_numbers_24h
+      description: Block numbers are consecutive, so any gap in the last day is a block the load skipped.
+      sql: >
+        select coalesce(max(number) - min(number) + 1 - count(distinct number), 0)
+        from `bigquery-public-data.crypto_ethereum.blocks`
+        where timestamp >= timestamp_sub(current_timestamp(), interval 24 hour)
+      maxValue: 0
+    - name: no_duplicate_blocks_24h
+      sql: >
+        select count(*) - count(distinct number)
+        from `bigquery-public-data.crypto_ethereum.blocks`
+        where timestamp >= timestamp_sub(current_timestamp(), interval 24 hour)
+      maxValue: 0
+---
+apiVersion: nullwake/v1
+kind: DataContract
+metadata:
+  name: eth_transactions
+  owner: blockchain-etl@public-dataset.example
+  description: >
+    Ethereum transactions in bigquery-public-data.crypto_ethereum, about 2 million a day. Checks: fresh,
+    normal hourly volume, and every transaction a block says it holds is actually in the table.
+spec:
+  connection: ethereum-public
+  dataset: bigquery-public-data.crypto_ethereum.transactions
+  schedule: {intervalMinutes: 15}
+  freshness: {column: block_timestamp, maxAgeMinutes: 30, scanHours: 6, severity: critical}
+  volume: {column: block_timestamp, windowHours: 1, lookbackWindows: 24, tolerancePct: 40, minRows: 20000}
+  checks:
+    - name: transactions_match_block_counts
+      description: >
+        Sum of blocks.transaction_count against rows in transactions, for the 24 hours ending an hour ago
+        (the last hour is still loading). Any difference is transactions missing or loaded twice.
+      sql: >
+        select abs(
+          (select coalesce(sum(transaction_count), 0) from `bigquery-public-data.crypto_ethereum.blocks`
+           where timestamp >= timestamp_sub(timestamp_trunc(current_timestamp(), hour), interval 25 hour)
+             and timestamp < timestamp_sub(timestamp_trunc(current_timestamp(), hour), interval 1 hour))
+          - (select count(*) from `bigquery-public-data.crypto_ethereum.transactions`
+             where block_timestamp >= timestamp_sub(timestamp_trunc(current_timestamp(), hour), interval 25 hour)
+               and block_timestamp < timestamp_sub(timestamp_trunc(current_timestamp(), hour), interval 1 hour)))
+      maxValue: 0
+---
+apiVersion: nullwake/v1
+kind: DataContract
+metadata:
+  name: eth_blocks_google
+  owner: google-blockchain-analytics@public-dataset.example
+  description: >
+    Google's managed Ethereum dataset (goog_blockchain_ethereum_mainnet_us). It publishes finalized blocks,
+    so it runs a little behind the community dataset. Checks: fresh, and the two datasets agree.
+spec:
+  connection: ethereum-public
+  dataset: bigquery-public-data.goog_blockchain_ethereum_mainnet_us.blocks
+  schedule: {intervalMinutes: 15}
+  freshness: {column: block_timestamp, maxAgeMinutes: 45, scanHours: 6, severity: critical}
+  checks:
+    - name: datasets_agree_on_block_count
+      description: >
+        Blocks in the 24 hours ending an hour ago, Google's dataset against the community one. Both record
+        the same chain, so the counts should match exactly.
+      sql: >
+        select abs(
+          (select count(distinct block_number) from `bigquery-public-data.goog_blockchain_ethereum_mainnet_us.blocks`
+           where block_timestamp >= timestamp_sub(timestamp_trunc(current_timestamp(), hour), interval 25 hour)
+             and block_timestamp < timestamp_sub(timestamp_trunc(current_timestamp(), hour), interval 1 hour))
+          - (select count(distinct number) from `bigquery-public-data.crypto_ethereum.blocks`
+             where timestamp >= timestamp_sub(timestamp_trunc(current_timestamp(), hour), interval 25 hour)
+               and timestamp < timestamp_sub(timestamp_trunc(current_timestamp(), hour), interval 1 hour)))
+      maxValue: 0
+    - name: community_dataset_lag_blocks
+      description: How many blocks the community dataset is behind Google's (negative means ahead). Alerts past 150 (~30 min).
+      sql: >
+        select (select max(block_number) from `bigquery-public-data.goog_blockchain_ethereum_mainnet_us.blocks`
+                where block_timestamp >= timestamp_sub(current_timestamp(), interval 6 hour))
+             - (select max(number) from `bigquery-public-data.crypto_ethereum.blocks`
+                where timestamp >= timestamp_sub(current_timestamp(), interval 6 hour))
+      maxValue: 150

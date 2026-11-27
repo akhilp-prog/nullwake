@@ -128,3 +128,18 @@ def test_future_skew_setting_is_compiled_from_yaml(tmp_path):
     default = load_bundle([write(tmp_path, CONNECTION_YAML + "---" + contract_yaml(
         "freshness: {column: loaded_at, maxAgeMinutes: 30}"))]).contracts[0].monitors[0].params
     assert default["maxFutureSkewMinutes"] == 5
+
+
+def test_freshness_scan_hours_limits_the_scan(tmp_path):
+    from nullwake.connectors import DIALECTS
+    bq = DIALECTS["bigquery"]
+    assert bq.freshness_sql("my-proj.d.t", "ts", 24).endswith(
+        "FROM `my-proj.d.t` WHERE ts >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 86400 SECOND)")
+    assert "WHERE" not in bq.freshness_sql("my-proj.d.t", "ts")
+    bundle = load_bundle([write(tmp_path, CONNECTION_YAML + "---" + contract_yaml(
+        "freshness: {column: a, maxAgeMinutes: 30, scanHours: 24}"))])
+    check = next(m for m in bundle.contracts[0].monitors if m.kind == "freshness")
+    assert check.params["scanHours"] == 24
+    with pytest.raises(ContractError, match="scanHours"):
+        load_bundle([write(tmp_path, CONNECTION_YAML + "---" + contract_yaml(
+            "freshness: {column: a, maxAgeMinutes: 180, scanHours: 2}"))])

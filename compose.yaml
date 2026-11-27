@@ -28,6 +28,7 @@ x-settings: &settings
   NULLWAKE_DEMO_MODE: ${NULLWAKE_DEMO_MODE:-false}
   NULLWAKE_DEMO_USER: ${NULLWAKE_DEMO_USER:-}
   NULLWAKE_DEMO_PASSWORD: ${NULLWAKE_DEMO_PASSWORD:-}
+  NULLWAKE_DEMO_LIVE_DATA: ${NULLWAKE_DEMO_LIVE_DATA:-false}
   NULLWAKE_CONTACT_NAME: ${NULLWAKE_CONTACT_NAME:-}
   NULLWAKE_CONTACT_EMAIL: ${NULLWAKE_CONTACT_EMAIL:-}
   NULLWAKE_CONTACT_LINKEDIN: ${NULLWAKE_CONTACT_LINKEDIN:-}
@@ -35,7 +36,7 @@ x-settings: &settings
 
 x-app: &app
   build: .
-  image: nullwake:${NULLWAKE_VERSION:-0.8.3}
+  image: nullwake:${NULLWAKE_VERSION:-0.8.4}
   restart: unless-stopped
   read_only: true
   tmpfs: [/tmp]

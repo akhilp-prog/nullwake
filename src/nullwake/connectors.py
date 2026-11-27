@@ -139,8 +139,10 @@ class Dialect:
         return self.aliases.get(t, t)
 
     # Shared query builders -------------------------------------------------------------
-    def freshness_sql(self, dataset: str, column: str) -> str:
-        return f"SELECT {self.age_seconds('MAX(' + self.column(column) + ')')}, COUNT(*) FROM {self.table(dataset)}"
+    def freshness_sql(self, dataset: str, column: str, scan_hours: int | None = None) -> str:
+        col = self.column(column)
+        where = f" WHERE {col} >= {self.ago(int(scan_hours) * 3600)}" if scan_hours else ""
+        return f"SELECT {self.age_seconds('MAX(' + col + ')')}, COUNT(*) FROM {self.table(dataset)}{where}"
 
     def volume_sql(self, dataset: str, column: str, window_hours: int, lookback_windows: int) -> str:
         col, w = self.column(column), int(window_hours) * 3600
