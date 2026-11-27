@@ -36,7 +36,7 @@
   </nav>
   <div class="wrap page-head">
     <h1>Security and data handling</h1>
-    <p class="lede">Everything your security team needs to review Nullwake: what it reads, what leaves your network, how credentials are kept and which warehouse permissions to grant. Updated November 2026 for version 0.7.</p>
+    <p class="lede">Everything your security team needs to review Nullwake: what it reads, what leaves your network, how credentials are kept and which warehouse permissions to grant. Updated November 2026 for version 0.8.</p>
   </div>
 </header>
 
@@ -51,6 +51,7 @@
     <li><a href="#access">Warehouse access</a></li>
     <li><a href="#secrets">Credentials</a></li>
     <li><a href="#app">Application security</a></li>
+    <li><a href="#privacy-law">GDPR, DPDP Act and HIPAA</a></li>
     <li><a href="#limits">Known limitations</a></li>
     <li><a href="#contact">Questions and reports</a></li>
   </ol>
@@ -61,7 +62,7 @@
 <section id="summary">
   <h2>Summary</h2>
   <ul class="ticks">
-    <li><b>You run it.</b> Nullwake is a set of containers on your own VM or container platform. There is no Nullwake cloud, no telemetry and no licence server.</li>
+    <li><b>You run it.</b> Nullwake is a set of containers on your own VM or container platform. There is no Nullwake cloud, no usage telemetry and no licence server. Optional OpenTelemetry export goes only to a collector you set.</li>
     <li><b>Read-only.</b> It connects with a warehouse role that can only read the tables you list. On Postgres every session is also opened read-only with a statement timeout.</li>
     <li><b>Aggregates, not rows.</b> Built-in checks read back counts, ages, null and duplicate counts, and column names and types. No result rows are copied.</li>
     <li><b>Credentials stay with you.</b> Contracts name environment variables. A contract containing an inline secret is rejected.</li>
@@ -152,6 +153,22 @@ GRANT ROLE NULLWAKE_READER TO USER NULLWAKE_SVC;</code></pre>
   </table></div>
 </section>
 
+<section id="privacy-law">
+  <h2>GDPR, DPDP Act and HIPAA</h2>
+  <p>Nullwake is software you run, not a service. Nothing from your deployment reaches the Nullwake project, so Nullwake is not your processor under the GDPR or the Digital Personal Data Protection Act, 2023, and not a business associate under HIPAA. There is no data processing agreement or BAA to sign with us. Your obligations stay with your own deployment, and Nullwake is built to keep them small.</p>
+  <div class="tbl-wrap"><table class="tbl tbl-qa">
+    <thead><tr><th>Question in your review</th><th>How Nullwake behaves</th></tr></thead>
+    <tbody>
+      <tr><td>Does it copy personal data or health records from the warehouse?</td><td>No. Built-in checks read back counts, ages, null and duplicate counts, and column names and types. No result rows are stored or sent in alerts. Custom SQL checks return a single number; review them so that number cannot identify a person.</td></tr>
+      <tr><td>Where is data stored?</td><td>Only where you deploy it. Choose an Indian region for DPDP-sensitive data, an EU region for GDPR, or HIPAA-eligible infrastructure under your existing BAA.</td></tr>
+      <tr><td>What personal data does Nullwake itself hold?</td><td>Your users' emails, password hashes and sessions, and an audit log that records who did what, with the client IP for password sign-ins. Proxy logs mask IP addresses and are deleted after 30 days.</td></tr>
+      <tr><td>Can we meet an erasure request?</td><td>Yes. <code>nullwake user EMAIL --delete</code> removes the account and its sessions. Warehouse data never needs erasing from Nullwake because it is not copied.</td></tr>
+      <tr><td>What could still reveal something sensitive?</td><td>Table and column names appear in the UI and in alerts. Send alerts only to channels approved for your data, and avoid naming tables after people.</td></tr>
+    </tbody>
+  </table></div>
+  <p>Nullwake holds no certifications such as SOC 2, ISO 27001 or HITRUST, and no tool can make an organisation HIPAA or GDPR compliant on its own. This section describes how the software behaves so your team can assess it; it is not legal advice. The detail is in <a href="https://github.com/akhilp-prog/nullwake/blob/main/docs/security.md#personal-data-and-privacy-law-gdpr-dpdp-act-hipaa">docs/security.md</a>. How this website handles visitors is in the <a href="/privacy">privacy notice</a>.</p>
+</section>
+
 <section id="limits">
   <h2>Known limitations</h2>
   <p>Stated plainly so they surface in your review rather than after it.</p>
@@ -160,7 +177,7 @@ GRANT ROLE NULLWAKE_READER TO USER NULLWAKE_SVC;</code></pre>
     <li><b>One organisation per deployment.</b> There is no multi-tenancy, which also means no data is shared between customers.</li>
     <li><b>Single host as shipped.</b> The bundled setup has no high availability. Nullwake's own state is one Postgres database: back it up daily, and test a restore before production. Instructions are in the <a href="https://github.com/akhilp-prog/nullwake/blob/main/docs/operations.md">operations guide</a>.</li>
     <li><b>Internal endpoints.</b> Metrics and readiness endpoints have no authentication and are blocked at the bundled proxy. Expose them only on internal networks.</li>
-    <li><b>Early product.</b> Nullwake is at version 0.6. Postgres is tested end to end, and Snowflake and BigQuery are verified against live accounts.</li>
+    <li><b>Early product.</b> Nullwake is at version 0.8. Postgres is tested end to end, and Snowflake and BigQuery are verified against live accounts.</li>
   </ul>
 </section>
 
@@ -175,8 +192,8 @@ GRANT ROLE NULLWAKE_READER TO USER NULLWAKE_SVC;</code></pre>
 <footer class="foot">
   <div class="wrap foot-in">
     <p class="foot-brand"><span class="logo"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="4"/><circle cx="16" cy="16" r="3.4" fill="currentColor"/></svg>nullwake</span> Data contracts that run inside your network.</p>
-    <p class="foot-links"><a href="mailto:hello@nullwake.si">hello@nullwake.si</a> <a href="/security">Security</a> <a href="/learn">Learn</a> <a href="https://app.nullwake.si/demo">Live demo</a> <a href="https://github.com/akhilp-prog/nullwake">GitHub</a></p>
-    <p class="privacy">This site sets no cookies, runs no JavaScript and loads nothing from other domains. Visits are logged with shortened IP addresses and deleted after 30 days.</p>
+    <p class="foot-links"><a href="mailto:hello@nullwake.si">hello@nullwake.si</a> <a href="/security">Security</a> <a href="/learn">Learn</a> <a href="/privacy">Privacy</a> <a href="https://app.nullwake.si/demo">Live demo</a> <a href="https://github.com/akhilp-prog/nullwake">GitHub</a></p>
+    <p class="privacy">This site sets no cookies, runs no JavaScript and loads nothing from other domains. Visits are logged with shortened IP addresses and deleted after 30 days. <a href="/privacy">Privacy notice</a>.</p>
   </div>
 </footer>
 </body>
