@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.5 (2026-11-28)
+
+- Volume checks take an optional `compareTo`: `previousWindows` (the default, unchanged), `sameTimeOfDay` or
+  `sameTimeOfWeek`. With a daily or weekly rhythm, comparing the latest window with the same time on earlier days
+  or weeks keeps the expected range tight at quiet hours, where comparing with the previous windows has to widen
+  it to cover the whole cycle. Found on the live Ethereum demo: the 24-hour baseline had widened to 47k-127k
+  transactions an hour, so a 30% drop at a quiet hour would not have alerted.
+- Demo: `eth_transactions_same_hour` runs the same-hour comparison next to the existing volume check.
+
 ## 0.8.4 (2026-11-27)
 
 - Freshness checks take an optional `scanHours`: only rows from that many recent hours are read, so on a large

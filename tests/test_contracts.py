@@ -143,3 +143,18 @@ def test_freshness_scan_hours_limits_the_scan(tmp_path):
     with pytest.raises(ContractError, match="scanHours"):
         load_bundle([write(tmp_path, CONNECTION_YAML + "---" + contract_yaml(
             "freshness: {column: a, maxAgeMinutes: 180, scanHours: 2}"))])
+
+
+def test_volume_compare_to(tmp_path):
+    def vol(body):
+        return load_bundle([write(tmp_path, CONNECTION_YAML + "---" + contract_yaml(body))])
+    m = next(m for m in vol("volume: {column: a, windowHours: 1, compareTo: sameTimeOfDay}").contracts[0].monitors
+             if m.kind == "volume")
+    assert m.params["compareTo"] == "sameTimeOfDay"
+    plain = next(m for m in vol("volume: {column: a, compareTo: previousWindows}").contracts[0].monitors
+                 if m.kind == "volume")
+    assert "compareTo" not in plain.params  # the default leaves stored params unchanged
+    with pytest.raises(ContractError, match="compareTo"):
+        vol("volume: {column: a, compareTo: hourly}")
+    with pytest.raises(ContractError, match="at most 24"):
+        vol("volume: {column: a, windowHours: 48, compareTo: sameTimeOfDay}")

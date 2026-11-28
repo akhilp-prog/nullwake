@@ -249,13 +249,23 @@ def parse_contract(doc: dict, where: str, source_yaml: str, connection_types: di
     vol = spec.get("volume")
     if vol is not None:
         vw = f"{where}.spec.volume"
-        add("volume", "volume", {
+        params = {
             "column": _ident(_req(vol, "column", vw), f"{vw}.column").lower(),
             "windowHours": _num(vol, "windowHours", vw, 24, 1, 168),
             "lookbackWindows": _num(vol, "lookbackWindows", vw, 7, 3, 28),
             "tolerancePct": _num(vol, "tolerancePct", vw, 50, 1, 1000, integer=False),
             "minRows": _num(vol, "minRows", vw, 1, 0, 10**12),
-        }, _severity(vol, vw, "warning"))
+        }
+        compare = vol.get("compareTo")
+        if compare is not None:
+            limits = {"previousWindows": 168, "sameTimeOfDay": 24, "sameTimeOfWeek": 168}
+            if compare not in limits:
+                raise ContractError(f"{vw}.compareTo: use one of {', '.join(limits)}")
+            if params["windowHours"] > limits[compare]:
+                raise ContractError(f"{vw}.windowHours: must be at most {limits[compare]} with compareTo: {compare}")
+            if compare != "previousWindows":
+                params["compareTo"] = compare
+        add("volume", "volume", params, _severity(vol, vw, "warning"))
 
     checks = spec.get("checks", []) or []
     if not isinstance(checks, list):

@@ -18,7 +18,7 @@ someone notices. Nullwake makes the producer's promises explicit and checks them
 | Contract says | Nullwake checks | Typical cause it catches |
 | --- | --- | --- |
 | `freshness: {maxAgeMinutes: 90}` | age of `MAX(loaded_at)`; add `scanHours: 24` on large partitioned tables to read only recent partitions | stalled or failed loads |
-| `volume: {windowHours: 24}` | rows in the latest window vs. a robust baseline (median ± MAD) of previous windows | partial loads, duplicated backfills |
+| `volume: {windowHours: 24}` | rows in the latest window vs. a robust baseline (median ± MAD) of previous windows, or of the same time on previous days or weeks (`compareTo: sameTimeOfDay` / `sameTimeOfWeek`) for data with a daily rhythm | partial loads, duplicated backfills |
 | `schema.columns` | `information_schema` vs. the contract | renamed, dropped or retyped columns |
 | `nullable: false`, `unique: true`, `uniqueKey` | null counts and duplicate keys | broken joins, replayed events |
 | `checks: [{sql: ...}]` | any single-`SELECT` business rule | negative amounts, orphan rows, bad codes |

@@ -63,26 +63,37 @@ def volume_bounds(history: list[float], tolerance_pct: float) -> tuple[float, fl
     return median, max(median - spread, 0.0), median + spread
 
 
+# How the volume check picks the windows it compares against. Consecutive windows suit flat traffic; data with a
+# daily or weekly rhythm (busy days, quiet nights) needs the same time on earlier days or weeks, or the expected
+# range has to widen to cover the whole cycle and a real drop at a quiet hour goes unnoticed.
+COMPARE_STEP_HOURS = {"previousWindows": None, "sameTimeOfDay": 24, "sameTimeOfWeek": 168}
+COMPARE_LABEL = {"previousWindows": "", "sameTimeOfDay": ", same time on previous days",
+                 "sameTimeOfWeek": ", same time in previous weeks"}
+
+
 def check_volume(conn: Connector, dataset: str, params: dict, state: dict) -> Result:
     windows = int(params.get("lookbackWindows", 7))
     hours = int(params.get("windowHours", 24))
-    row = conn.row(conn.dialect.volume_sql(dataset, params["column"], hours, windows))
+    compare = params.get("compareTo", "previousWindows")
+    step = COMPARE_STEP_HOURS.get(compare)
+    row = conn.row(conn.dialect.volume_sql(dataset, params["column"], hours, windows, step))
     counts = [int(v or 0) for v in row]
     current, history = counts[0], counts[1:]
     median, low, high = volume_bounds([float(h) for h in history], float(params.get("tolerancePct", 50)))
     observed = {"current": current, "history": history, "median": median, "low": round(low, 1),
-                "high": round(high, 1), "windowHours": hours}
+                "high": round(high, 1), "windowHours": hours, "compareTo": compare}
     min_rows = int(params.get("minRows", 1))
     label = f"{current:,} rows in the last {hours}h"
+    basis = COMPARE_LABEL.get(compare, "")
     if current < min_rows:
         return Result("fail", f"{label}; at least {min_rows:,} expected", current, observed)
     if sum(1 for h in history if h > 0) < 3:
         return Result("pass", f"{label}; not enough history yet for a baseline", current, observed)
     if current < low or current > high:
         direction = "below" if current < low else "above"
-        return Result("fail", f"{label}, {direction} the expected {low:,.0f}–{high:,.0f} (median {median:,.0f})",
+        return Result("fail", f"{label}, {direction} the expected {low:,.0f}–{high:,.0f} (median {median:,.0f}{basis})",
                       current, observed)
-    return Result("pass", f"{label}, within {low:,.0f}–{high:,.0f}", current, observed)
+    return Result("pass", f"{label}, within {low:,.0f}–{high:,.0f}{basis}", current, observed)
 
 
 def _diff(expected: list[dict], actual: list[dict], allow_extra: bool,

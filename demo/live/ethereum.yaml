@@ -113,3 +113,18 @@ spec:
              - (select max(number) from `bigquery-public-data.crypto_ethereum.blocks`
                 where timestamp >= timestamp_sub(current_timestamp(), interval 6 hour))
       maxValue: 150
+---
+apiVersion: nullwake/v1
+kind: DataContract
+metadata:
+  name: eth_transactions_same_hour
+  owner: blockchain-etl@public-dataset.example
+  description: >
+    The same transactions table, with volume compared against the same hour on each of the previous 7 days
+    instead of the previous 24 hours. Ethereum traffic has a daily rhythm, so this check keeps a tighter
+    expected range at quiet hours. Runs next to eth_transactions.volume so the two methods can be compared.
+spec:
+  connection: ethereum-public
+  dataset: bigquery-public-data.crypto_ethereum.transactions
+  schedule: {intervalMinutes: 15}
+  volume: {column: block_timestamp, windowHours: 1, compareTo: sameTimeOfDay, lookbackWindows: 7, tolerancePct: 25, minRows: 20000}

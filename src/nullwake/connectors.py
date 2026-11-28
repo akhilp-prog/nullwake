@@ -144,13 +144,19 @@ class Dialect:
         where = f" WHERE {col} >= {self.ago(int(scan_hours) * 3600)}" if scan_hours else ""
         return f"SELECT {self.age_seconds('MAX(' + col + ')')}, COUNT(*) FROM {self.table(dataset)}{where}"
 
-    def volume_sql(self, dataset: str, column: str, window_hours: int, lookback_windows: int) -> str:
+    def volume_sql(self, dataset: str, column: str, window_hours: int, lookback_windows: int,
+                   step_hours: int | None = None) -> str:
+        """Row counts for the latest window, then for lookback_windows earlier windows of the same length. Earlier
+        windows start step_hours apart: by default they are consecutive; 24 compares the same time on earlier
+        days, 168 the same time on earlier weeks."""
         col, w = self.column(column), int(window_hours) * 3600
+        step = int(step_hours or window_hours) * 3600
         buckets = []
         for i in range(lookback_windows + 1):
-            upper = f" AND {col} <= {self.ago(0)}" if i == 0 else f" AND {col} < {self.ago(w * i)}"
-            buckets.append(f"SUM(CASE WHEN {col} >= {self.ago(w * (i + 1))}{upper} THEN 1 ELSE 0 END)")
-        return f"SELECT {', '.join(buckets)} FROM {self.table(dataset)} WHERE {col} >= {self.ago(w * (lookback_windows + 1))}"
+            upper = f" AND {col} <= {self.ago(0)}" if i == 0 else f" AND {col} < {self.ago(step * i)}"
+            buckets.append(f"SUM(CASE WHEN {col} >= {self.ago(step * i + w)}{upper} THEN 1 ELSE 0 END)")
+        return (f"SELECT {', '.join(buckets)} FROM {self.table(dataset)} "
+                f"WHERE {col} >= {self.ago(step * lookback_windows + w)}")
 
     def null_sql(self, dataset: str, column: str) -> str:
         return f"SELECT COUNT(*), COUNT(*) - COUNT({self.column(column)}) FROM {self.table(dataset)}"

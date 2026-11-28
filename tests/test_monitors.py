@@ -166,3 +166,46 @@ def test_bare_name_in_a_mixed_case_schema(wh, pg):
         assert [c.name for c in pg.columns("orders_mc")] == ["id", "note"]
     finally:
         wh.execute('DROP SCHEMA "MixedCase" CASCADE')
+
+
+def make_daily_rhythm(wh, now_hour: int, same_hour: list[int], other_hours: int):
+    """A table with a daily rhythm: same_hour[d] rows in the hour ending now, d days ago; every other hour of the
+    last week holds other_hours rows."""
+    wh.execute("CREATE TABLE nwtest.events (id bigint, loaded_at timestamptz)")
+    rows, n = [], 0
+    for h in range(7 * 24 + 1):
+        day, rem = divmod(h, 24)
+        count = same_hour[day] if rem == 0 and day < len(same_hour) else other_hours
+        for j in range(count):
+            n += 1
+            rows.append((n, h * 3600 + (j + 1) * 3600 / (count + 1)))
+    with wh.cursor() as cur:
+        cur.executemany("INSERT INTO nwtest.events VALUES (%s, now() - make_interval(secs => %s))", rows)
+
+
+DAILY = {"column": "loaded_at", "windowHours": 1, "lookbackWindows": 6, "tolerancePct": 20, "minRows": 1,
+         "compareTo": "sameTimeOfDay"}
+
+
+def test_volume_same_time_of_day_follows_a_daily_rhythm(wh, pg):
+    # A quiet hour: 50 rows now and at this hour on each of the last 6 days, 200 in every other hour.
+    make_daily_rhythm(wh, 0, [50, 48, 52, 50, 49, 51, 50], other_hours=200)
+    daily = evaluate(pg, "volume", "nwtest.events", DAILY)
+    assert daily.status == "pass", daily.message
+    assert daily.observed["history"] == [48, 52, 50, 49, 51, 50] and "same time on previous days" in daily.message
+    consecutive = evaluate(pg, "volume", "nwtest.events", {**DAILY, "compareTo": "previousWindows"})
+    assert consecutive.status == "fail" and "below" in consecutive.message  # the quiet hour looks like an outage
+
+    wh.execute("DROP TABLE nwtest.events")
+    # Half the usual rows at the quiet hour: a real drop that the same-hour comparison catches.
+    make_daily_rhythm(wh, 0, [25, 48, 52, 50, 49, 51, 50], other_hours=200)
+    drop = evaluate(pg, "volume", "nwtest.events", DAILY)
+    assert drop.status == "fail" and "below" in drop.message and "median 50" in drop.message
+
+
+def test_volume_sql_steps_by_day():
+    from nullwake.connectors import DIALECTS
+    sql = DIALECTS["bigquery"].volume_sql("my-proj.d.t", "ts", 1, 7, 24)
+    assert "INTERVAL 90000 SECOND" in sql  # window 1 day ago: from 25 h ago
+    assert sql.endswith("WHERE ts >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 608400 SECOND)")  # 7 days + 1 h
+    assert DIALECTS["postgres"].volume_sql("a.b", "ts", 1, 6) == DIALECTS["postgres"].volume_sql("a.b", "ts", 1, 6, 1)
